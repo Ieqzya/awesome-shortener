@@ -4,10 +4,12 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/go-chi/chi/v5"
 )
 
 func TestCreateShortURL(t *testing.T) {
-	urlStorage = make(map[string]string)
+	urls = make(map[string]string)
 
 	body := strings.NewReader("https://google.com")
 	req := httptest.NewRequest("POST", "/", body)
@@ -24,7 +26,7 @@ func TestCreateShortURL(t *testing.T) {
 		t.Errorf("Неправильный ответ: %s", response)
 	}
 
-	if len(urlStorage) != 1 {
+	if len(urls) != 1 {
 		t.Errorf("URL не сохранился")
 	}
 }
@@ -41,13 +43,16 @@ func TestCreateShortURLBadRequest(t *testing.T) {
 }
 
 func TestRedirectToOriginal(t *testing.T) {
-	urlStorage = make(map[string]string)
-	urlStorage["test123"] = "https://example.com"
+	urls = make(map[string]string)
+	urls["test123"] = "https://example.com"
+
+	r := chi.NewRouter()
+	r.Get("/{id}", redirectToOriginal)
 
 	req := httptest.NewRequest("GET", "/test123", nil)
 	w := httptest.NewRecorder()
 
-	redirectToOriginal(w, req)
+	r.ServeHTTP(w, req)
 
 	if w.Code != 307 {
 		t.Errorf("Ожидали код 307, получили %d", w.Code)
@@ -59,12 +64,15 @@ func TestRedirectToOriginal(t *testing.T) {
 }
 
 func TestRedirectNotFound(t *testing.T) {
-	urlStorage = make(map[string]string)
+	urls = make(map[string]string)
+
+	r := chi.NewRouter()
+	r.Get("/{id}", redirectToOriginal)
 
 	req := httptest.NewRequest("GET", "/notfound", nil)
 	w := httptest.NewRecorder()
 
-	redirectToOriginal(w, req)
+	r.ServeHTTP(w, req)
 
 	if w.Code != 400 {
 		t.Errorf("Ожидали код 400, получили %d", w.Code)

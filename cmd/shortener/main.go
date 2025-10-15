@@ -7,12 +7,12 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/go-chi/chi/v5"
 )
 
-// Простое хранилище URL в памяти
-var urlStorage = make(map[string]string)
+var urls = make(map[string]string)
 
-// Функция для генерации случайного ID
 func generateID() string {
 	const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	result := make([]byte, 8)
@@ -22,95 +22,41 @@ func generateID() string {
 	return string(result)
 }
 
-// Обработчик для создания короткой ссылки (POST /)
 func createShortURL(w http.ResponseWriter, r *http.Request) {
-	// Проверяем метод
-	if r.Method != http.MethodPost {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
-		return
-	}
-
-	// Читаем тело запроса
 	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
+	if err != nil || len(strings.TrimSpace(string(body))) == 0 {
+		http.Error(w, "Bad Request", 400)
 		return
 	}
 
 	originalURL := strings.TrimSpace(string(body))
-	
-	// Проверяем, что URL не пустой
-	if originalURL == "" {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
-		return
-	}
-
-	// Генерируем ID и сохраняем
 	id := generateID()
-	urlStorage[id] = originalURL
+	urls[id] = originalURL
 
-	// Возвращаем короткую ссылку
-	shortURL := fmt.Sprintf("http://localhost:8080/%s", id)
 	w.Header().Set("Content-Type", "text/plain")
-	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte(shortURL))
+	w.WriteHeader(201)
+	fmt.Fprintf(w, "http://localhost:8080/%s", id)
 }
 
-// Обработчик для перенаправления (GET /{id})
 func redirectToOriginal(w http.ResponseWriter, r *http.Request) {
-	// Проверяем метод
-	if r.Method != http.MethodGet {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
-		return
-	}
-
-	// Получаем ID из пути
-	path := r.URL.Path
-	if path == "/" {
-		// Если путь просто "/", то это POST запрос для создания ссылки
-		createShortURL(w, r)
-		return
-	}
-
-	id := strings.TrimPrefix(path, "/")
+	id := chi.URLParam(r, "id")
 	
-	// Проверяем, что ID не пустой
-	if id == "" {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
-		return
+	if originalURL, ok := urls[id]; ok {
+		w.Header().Set("Location", originalURL)
+		w.WriteHeader(307)
+	} else {
+		http.Error(w, "Bad Request", 400)
 	}
-
-	// Ищем оригинальный URL
-	originalURL, exists := urlStorage[id]
-	if !exists {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
-		return
-	}
-
-	// Перенаправляем
-	w.Header().Set("Location", originalURL)
-	w.WriteHeader(http.StatusTemporaryRedirect)
 }
 
 func main() {
-	// Инициализируем генератор случайных чисел
 	rand.Seed(time.Now().UnixNano())
 
-	// Настраиваем маршруты
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && r.URL.Path == "/" {
-			createShortURL(w, r)
-		} else if r.Method == http.MethodGet && r.URL.Path != "/" {
-			redirectToOriginal(w, r)
-		} else {
-			http.Error(w, "Bad Request", http.StatusBadRequest)
-		}
-	})
+	r := chi.NewRouter()
+	
+	r.Post("/", createShortURL)
+	r.Get("/{id}", redirectToOriginal)
 
-	// Запускаем сервер
-	fmt.Println("Сервер запущен на http://localhost:8080")
-	err := http.ListenAndServe(":8080", nil)
-	if err != nil {
-		fmt.Printf("Ошибка запуска сервера: %v\n", err)
-	}
+	fmt.Println("Сервер на http://localhost:8080")
+	http.ListenAndServe(":8080", r)
 }
