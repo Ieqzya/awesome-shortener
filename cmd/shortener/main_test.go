@@ -5,8 +5,17 @@ import (
 	"strings"
 	"testing"
 
+	"awesome-shortener/internal/config"
 	"github.com/go-chi/chi/v5"
 )
+
+func init() {
+	// Инициализируем конфигурацию для тестов
+	cfg = &config.Config{
+		ServerAddress: "localhost:8080",
+		BaseURL:       "http://localhost:8080",
+	}
+}
 
 func TestCreateShortURL(t *testing.T) {
 	urls = make(map[string]string)

@@ -8,10 +8,12 @@ import (
 	"strings"
 	"time"
 
+	"awesome-shortener/internal/config"
 	"github.com/go-chi/chi/v5"
 )
 
 var urls = make(map[string]string)
+var cfg *config.Config
 
 func generateID() string {
 	const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -35,7 +37,7 @@ func createShortURL(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(201)
-	fmt.Fprintf(w, "http://localhost:8080/%s", id)
+	fmt.Fprintf(w, "%s/%s", cfg.BaseURL, id)
 }
 
 func redirectToOriginal(w http.ResponseWriter, r *http.Request) {
@@ -50,6 +52,7 @@ func redirectToOriginal(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	cfg = config.NewConfig()
 	rand.Seed(time.Now().UnixNano())
 
 	r := chi.NewRouter()
@@ -57,6 +60,8 @@ func main() {
 	r.Post("/", createShortURL)
 	r.Get("/{id}", redirectToOriginal)
 
-	fmt.Println("Сервер на http://localhost:8080")
-	http.ListenAndServe(":8080", r)
+	fmt.Printf("Сервер запущен на %s\n", cfg.ServerAddress)
+	fmt.Printf("Базовый URL: %s\n", cfg.BaseURL)
+	
+	http.ListenAndServe(cfg.ServerAddress, r)
 }
