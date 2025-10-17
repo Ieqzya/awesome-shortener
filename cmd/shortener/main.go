@@ -3,10 +3,10 @@ package main
 import (
 	"fmt"
 	"io"
+	"log"
 	"math/rand"
 	"net/http"
 	"strings"
-	"time"
 
 	"awesome-shortener/internal/config"
 	"github.com/go-chi/chi/v5"
@@ -52,8 +52,11 @@ func redirectToOriginal(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	cfg = config.NewConfig()
-	rand.Seed(time.Now().UnixNano())
+	var err error
+	cfg, err = config.NewConfig()
+	if err != nil {
+		log.Fatalf("Ошибка инициализации конфигурации: %v", err)
+	}
 
 	r := chi.NewRouter()
 	
@@ -63,5 +66,7 @@ func main() {
 	fmt.Printf("Сервер запущен на %s\n", cfg.ServerAddress)
 	fmt.Printf("Базовый URL: %s\n", cfg.BaseURL)
 	
-	http.ListenAndServe(cfg.ServerAddress, r)
+	if err := http.ListenAndServe(cfg.ServerAddress, r); err != nil {
+		log.Fatalf("Ошибка запуска сервера: %v", err)
+	}
 }

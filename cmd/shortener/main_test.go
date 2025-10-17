@@ -12,8 +12,8 @@ import (
 func init() {
 	// Инициализируем конфигурацию для тестов
 	cfg = &config.Config{
-		ServerAddress: "localhost:8080",
-		BaseURL:       "http://localhost:8080",
+		ServerAddress: config.DefaultServerAddress,
+		BaseURL:       config.DefaultBaseURL,
 	}
 }
 
