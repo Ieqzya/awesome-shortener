@@ -10,7 +10,9 @@ import (
 	"strings"
 
 	"awesome-shortener/internal/config"
+	"awesome-shortener/internal/middleware"
 	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
 )
 
 var urls = make(map[string]string)
@@ -98,7 +100,17 @@ func main() {
 		log.Fatalf("Ошибка инициализации конфигурации: %v", err)
 	}
 
+	// Инициализируем zap логгер
+	logger, err := zap.NewProduction()
+	if err != nil {
+		log.Fatalf("Ошибка инициализации логгера: %v", err)
+	}
+	defer logger.Sync()
+
 	r := chi.NewRouter()
+	
+	// Добавляем middleware для логирования
+	r.Use(middleware.Logger(logger))
 	
 	r.Post("/", createShortURL)
 	r.Get("/{id}", redirectToOriginal)
