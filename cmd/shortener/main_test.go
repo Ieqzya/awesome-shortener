@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -82,6 +83,65 @@ func TestRedirectNotFound(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	r.ServeHTTP(w, req)
+
+	if w.Code != 400 {
+		t.Errorf("Ожидали код 400, получили %d", w.Code)
+	}
+}
+
+func TestCreateShortURLJSON(t *testing.T) {
+	urls = make(map[string]string)
+
+	jsonBody := `{"url":"https://practicum.yandex.ru"}`
+	req := httptest.NewRequest("POST", "/api/shorten", strings.NewReader(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	createShortURLJSON(w, req)
+
+	if w.Code != 201 {
+		t.Errorf("Ожидали код 201, получили %d", w.Code)
+	}
+
+	if w.Header().Get("Content-Type") != "application/json" {
+		t.Errorf("Ожидали Content-Type: application/json, получили %s", w.Header().Get("Content-Type"))
+	}
+
+	var response ShortenResponse
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Errorf("Ошибка декодирования JSON ответа: %v", err)
+	}
+
+	if !strings.Contains(response.Result, "http://localhost:8080/") {
+		t.Errorf("Неправильный ответ: %s", response.Result)
+	}
+
+	if len(urls) != 1 {
+		t.Errorf("URL не сохранился")
+	}
+}
+
+func TestCreateShortURLJSONBadRequest(t *testing.T) {
+	// Тест с невалидным JSON
+	req := httptest.NewRequest("POST", "/api/shorten", strings.NewReader(`{"invalid": json}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	createShortURLJSON(w, req)
+
+	if w.Code != 400 {
+		t.Errorf("Ожидали код 400, получили %d", w.Code)
+	}
+}
+
+func TestCreateShortURLJSONEmptyURL(t *testing.T) {
+	// Тест с пустым URL
+	jsonBody := `{"url":""}`
+	req := httptest.NewRequest("POST", "/api/shorten", strings.NewReader(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	createShortURLJSON(w, req)
 
 	if w.Code != 400 {
 		t.Errorf("Ожидали код 400, получили %d", w.Code)

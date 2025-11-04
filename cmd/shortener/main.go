@@ -82,6 +82,36 @@ func createShortURL(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func createShortURLJSON(w http.ResponseWriter, r *http.Request) {
+	var req ShortenRequest
+	
+	// Декодируем JSON из тела запроса
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Bad Request", 400)
+		return
+	}
+	
+	originalURL := strings.TrimSpace(req.URL)
+	if originalURL == "" {
+		http.Error(w, "Bad Request", 400)
+		return
+	}
+
+	id := generateID()
+	urls[id] = originalURL
+	shortURL := fmt.Sprintf("%s/%s", cfg.BaseURL, id)
+
+	// Возвращаем JSON ответ
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	
+	response := ShortenResponse{Result: shortURL}
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "Internal Server Error", 500)
+		return
+	}
+}
+
 func redirectToOriginal(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	
@@ -113,6 +143,7 @@ func main() {
 	r.Use(middleware.Logger(logger))
 	
 	r.Post("/", createShortURL)
+	r.Post("/api/shorten", createShortURLJSON)
 	r.Get("/{id}", redirectToOriginal)
 
 	fmt.Printf("Сервер запущен на %s\n", cfg.ServerAddress)
