@@ -1,17 +1,33 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"math/rand"
 	"net/http"
 	"strings"
+
+	"awesome-shortener/internal/config"
+	"awesome-shortener/internal/middleware"
+	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
 )
 
-// Простое хранилище URL в памяти
-var urlStorage = make(map[string]string)
+var urls = make(map[string]string)
+var cfg *config.Config
 
-// Функция для генерации случайного ID
+// ShortenRequest представляет запрос на сокращение URL в JSON формате
+type ShortenRequest struct {
+	URL string `json:"url"`
+}
+
+// ShortenResponse представляет ответ с сокращенным URL в JSON формате
+type ShortenResponse struct {
+	Result string `json:"result"`
+}
+
 func generateID() string {
 	const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	result := make([]byte, 8)
@@ -21,92 +37,88 @@ func generateID() string {
 	return string(result)
 }
 
-// Обработчик для создания короткой ссылки (POST /)
 func createShortURL(w http.ResponseWriter, r *http.Request) {
-	// Проверяем метод
-	if r.Method != http.MethodPost {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
-		return
-	}
-
-	// Читаем тело запроса
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
-		return
-	}
-
-	originalURL := strings.TrimSpace(string(body))
+	contentType := r.Header.Get("Content-Type")
 	
-	// Проверяем, что URL не пустой
+	var originalURL string
+	
+	// Обработка JSON запроса
+	if strings.Contains(contentType, "application/json") {
+		var req ShortenRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Bad Request", 400)
+			return
+		}
+		originalURL = strings.TrimSpace(req.URL)
+	} else {
+		// Обработка текстового запроса (как в предыдущих итерациях)
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "Bad Request", 400)
+			return
+		}
+		originalURL = strings.TrimSpace(string(body))
+	}
+	
 	if originalURL == "" {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
+		http.Error(w, "Bad Request", 400)
 		return
 	}
 
-	// Генерируем ID и сохраняем
 	id := generateID()
-	urlStorage[id] = originalURL
+	urls[id] = originalURL
+	shortURL := fmt.Sprintf("%s/%s", cfg.BaseURL, id)
 
-	// Возвращаем короткую ссылку
-	shortURL := fmt.Sprintf("http://localhost:8080/%s", id)
-	w.Header().Set("Content-Type", "text/plain")
-	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte(shortURL))
+	// Возвращаем ответ в том же формате, что и запрос
+	if strings.Contains(contentType, "application/json") {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(201)
+		response := ShortenResponse{Result: shortURL}
+		json.NewEncoder(w).Encode(response)
+	} else {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(201)
+		fmt.Fprint(w, shortURL)
+	}
 }
 
-// Обработчик для перенаправления (GET /{id})
 func redirectToOriginal(w http.ResponseWriter, r *http.Request) {
-	// Проверяем метод
-	if r.Method != http.MethodGet {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
-		return
-	}
-
-	// Получаем ID из пути
-	path := r.URL.Path
-	if path == "/" {
-		// Если путь просто "/", то это POST запрос для создания ссылки
-		createShortURL(w, r)
-		return
-	}
-
-	id := strings.TrimPrefix(path, "/")
+	id := chi.URLParam(r, "id")
 	
-	// Проверяем, что ID не пустой
-	if id == "" {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
-		return
+	if originalURL, ok := urls[id]; ok {
+		w.Header().Set("Location", originalURL)
+		w.WriteHeader(307)
+	} else {
+		http.Error(w, "Bad Request", 400)
 	}
-
-	// Ищем оригинальный URL
-	originalURL, exists := urlStorage[id]
-	if !exists {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
-		return
-	}
-
-	// Перенаправляем
-	w.Header().Set("Location", originalURL)
-	w.WriteHeader(http.StatusTemporaryRedirect)
 }
 
 func main() {
-	// Настраиваем маршруты
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && r.URL.Path == "/" {
-			createShortURL(w, r)
-		} else if r.Method == http.MethodGet && r.URL.Path != "/" {
-			redirectToOriginal(w, r)
-		} else {
-			http.Error(w, "Bad Request", http.StatusBadRequest)
-		}
-	})
-
-	// Запускаем сервер
-	fmt.Println("Сервер запущен на http://localhost:8080")
-	err := http.ListenAndServe(":8080", nil)
+	var err error
+	cfg, err = config.NewConfig()
 	if err != nil {
-		fmt.Printf("Ошибка запуска сервера: %v\n", err)
+		log.Fatalf("Ошибка инициализации конфигурации: %v", err)
+	}
+
+	// Инициализируем zap логгер
+	logger, err := zap.NewProduction()
+	if err != nil {
+		log.Fatalf("Ошибка инициализации логгера: %v", err)
+	}
+	defer logger.Sync()
+
+	r := chi.NewRouter()
+	
+	// Добавляем middleware для логирования
+	r.Use(middleware.Logger(logger))
+	
+	r.Post("/", createShortURL)
+	r.Get("/{id}", redirectToOriginal)
+
+	fmt.Printf("Сервер запущен на %s\n", cfg.ServerAddress)
+	fmt.Printf("Базовый URL: %s\n", cfg.BaseURL)
+	
+	if err := http.ListenAndServe(cfg.ServerAddress, r); err != nil {
+		log.Fatalf("Ошибка запуска сервера: %v", err)
 	}
 }
