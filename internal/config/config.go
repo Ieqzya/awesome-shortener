@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"net/url"
+	"os"
 	"strings"
 )
 
@@ -19,14 +20,30 @@ type Config struct {
 	BaseURL       string // базовый адрес результирующего сокращённого URL
 }
 
-// NewConfig создает и инициализирует конфигурацию из флагов командной строки
+// NewConfig создает и инициализирует конфигурацию с приоритетом:
+// 1. Переменные окружения
+// 2. Флаги командной строки
+// 3. Значения по умолчанию
 func NewConfig() (*Config, error) {
 	cfg := &Config{}
 
-	flag.StringVar(&cfg.ServerAddress, "a", DefaultServerAddress, "адрес запуска HTTP-сервера")
-	flag.StringVar(&cfg.BaseURL, "b", DefaultBaseURL, "базовый адрес результирующего сокращённого URL")
-	
+	// Устанавливаем значения по умолчанию
+	cfg.ServerAddress = DefaultServerAddress
+	cfg.BaseURL = DefaultBaseURL
+
+	// Парсим флаги командной строки
+	flag.StringVar(&cfg.ServerAddress, "a", cfg.ServerAddress, "адрес запуска HTTP-сервера")
+	flag.StringVar(&cfg.BaseURL, "b", cfg.BaseURL, "базовый адрес результирующего сокращённого URL")
 	flag.Parse()
+
+	// Переопределяем переменными окружения (наивысший приоритет)
+	if envServerAddr := os.Getenv("SERVER_ADDRESS"); envServerAddr != "" {
+		cfg.ServerAddress = envServerAddr
+	}
+
+	if envBaseURL := os.Getenv("BASE_URL"); envBaseURL != "" {
+		cfg.BaseURL = envBaseURL
+	}
 
 	// Валидация конфигурации
 	if err := cfg.validate(); err != nil {

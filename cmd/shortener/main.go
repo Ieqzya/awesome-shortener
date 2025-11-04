@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -15,6 +16,16 @@ import (
 var urls = make(map[string]string)
 var cfg *config.Config
 
+// ShortenRequest представляет запрос на сокращение URL в JSON формате
+type ShortenRequest struct {
+	URL string `json:"url"`
+}
+
+// ShortenResponse представляет ответ с сокращенным URL в JSON формате
+type ShortenResponse struct {
+	Result string `json:"result"`
+}
+
 func generateID() string {
 	const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	result := make([]byte, 8)
@@ -25,19 +36,48 @@ func generateID() string {
 }
 
 func createShortURL(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil || len(strings.TrimSpace(string(body))) == 0 {
+	contentType := r.Header.Get("Content-Type")
+	
+	var originalURL string
+	
+	// Обработка JSON запроса
+	if strings.Contains(contentType, "application/json") {
+		var req ShortenRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Bad Request", 400)
+			return
+		}
+		originalURL = strings.TrimSpace(req.URL)
+	} else {
+		// Обработка текстового запроса (как в предыдущих итерациях)
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "Bad Request", 400)
+			return
+		}
+		originalURL = strings.TrimSpace(string(body))
+	}
+	
+	if originalURL == "" {
 		http.Error(w, "Bad Request", 400)
 		return
 	}
 
-	originalURL := strings.TrimSpace(string(body))
 	id := generateID()
 	urls[id] = originalURL
+	shortURL := fmt.Sprintf("%s/%s", cfg.BaseURL, id)
 
-	w.Header().Set("Content-Type", "text/plain")
-	w.WriteHeader(201)
-	fmt.Fprintf(w, "%s/%s", cfg.BaseURL, id)
+	// Возвращаем ответ в том же формате, что и запрос
+	if strings.Contains(contentType, "application/json") {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(201)
+		response := ShortenResponse{Result: shortURL}
+		json.NewEncoder(w).Encode(response)
+	} else {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(201)
+		fmt.Fprint(w, shortURL)
+	}
 }
 
 func redirectToOriginal(w http.ResponseWriter, r *http.Request) {
