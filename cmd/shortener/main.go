@@ -139,6 +139,8 @@ func main() {
 
 	r := chi.NewRouter()
 	
+	// Добавляем middleware для gzip сжатия
+	r.Use(middleware.GzipMiddleware)
 	// Добавляем middleware для логирования
 	r.Use(middleware.Logger(logger))
 	
