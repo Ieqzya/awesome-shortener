@@ -6,7 +6,6 @@ import (
 	"math/rand"
 	"net/http"
 	"strings"
-	"time"
 )
 
 // Простое хранилище URL в памяти
@@ -93,9 +92,6 @@ func redirectToOriginal(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	// Инициализируем генератор случайных чисел
-	rand.Seed(time.Now().UnixNano())
-
 	// Настраиваем маршруты
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost && r.URL.Path == "/" {
