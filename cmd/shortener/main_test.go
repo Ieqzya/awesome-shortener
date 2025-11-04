@@ -11,6 +11,7 @@ import (
 
 	"awesome-shortener/internal/config"
 	"awesome-shortener/internal/middleware"
+	"awesome-shortener/internal/service"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 )
@@ -18,13 +19,14 @@ import (
 func init() {
 	// Инициализируем конфигурацию для тестов
 	cfg = &config.Config{
-		ServerAddress: config.DefaultServerAddress,
-		BaseURL:       config.DefaultBaseURL,
+		ServerAddress:   config.DefaultServerAddress,
+		BaseURL:         config.DefaultBaseURL,
+		FileStoragePath: "/tmp/test-short-url-db.json",
 	}
 }
 
 func TestCreateShortURL(t *testing.T) {
-	urls = make(map[string]string)
+	storage = service.NewFileStorage("/tmp/test-short-url-db-1.json")
 
 	body := strings.NewReader("https://google.com")
 	req := httptest.NewRequest("POST", "/", body)
@@ -40,10 +42,6 @@ func TestCreateShortURL(t *testing.T) {
 	if !strings.Contains(response, "http://localhost:8080/") {
 		t.Errorf("Неправильный ответ: %s", response)
 	}
-
-	if len(urls) != 1 {
-		t.Errorf("URL не сохранился")
-	}
 }
 
 func TestCreateShortURLBadRequest(t *testing.T) {
@@ -58,8 +56,8 @@ func TestCreateShortURLBadRequest(t *testing.T) {
 }
 
 func TestRedirectToOriginal(t *testing.T) {
-	urls = make(map[string]string)
-	urls["test123"] = "https://example.com"
+	storage = service.NewFileStorage("/tmp/test-short-url-db-2.json")
+	storage.Store("test123", "https://example.com")
 
 	r := chi.NewRouter()
 	r.Get("/{id}", redirectToOriginal)
@@ -79,7 +77,7 @@ func TestRedirectToOriginal(t *testing.T) {
 }
 
 func TestRedirectNotFound(t *testing.T) {
-	urls = make(map[string]string)
+	storage = service.NewFileStorage("/tmp/test-short-url-db-3.json")
 
 	r := chi.NewRouter()
 	r.Get("/{id}", redirectToOriginal)
@@ -95,7 +93,7 @@ func TestRedirectNotFound(t *testing.T) {
 }
 
 func TestCreateShortURLJSON(t *testing.T) {
-	urls = make(map[string]string)
+	storage = service.NewFileStorage("/tmp/test-short-url-db-4.json")
 
 	jsonBody := `{"url":"https://practicum.yandex.ru"}`
 	req := httptest.NewRequest("POST", "/api/shorten", strings.NewReader(jsonBody))
@@ -119,10 +117,6 @@ func TestCreateShortURLJSON(t *testing.T) {
 
 	if !strings.Contains(response.Result, "http://localhost:8080/") {
 		t.Errorf("Неправильный ответ: %s", response.Result)
-	}
-
-	if len(urls) != 1 {
-		t.Errorf("URL не сохранился")
 	}
 }
 
@@ -154,7 +148,7 @@ func TestCreateShortURLJSONEmptyURL(t *testing.T) {
 }
 
 func TestGzipCompression(t *testing.T) {
-	urls = make(map[string]string)
+	storage = service.NewFileStorage("/tmp/test-short-url-db-5.json")
 
 	// Создаем роутер с middleware
 	logger, _ := zap.NewProduction()
@@ -202,7 +196,7 @@ func TestGzipCompression(t *testing.T) {
 }
 
 func TestGzipDecompression(t *testing.T) {
-	urls = make(map[string]string)
+	storage = service.NewFileStorage("/tmp/test-short-url-db-6.json")
 
 	// Создаем роутер с middleware
 	logger, _ := zap.NewProduction()

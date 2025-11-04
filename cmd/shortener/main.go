@@ -11,11 +11,12 @@ import (
 
 	"awesome-shortener/internal/config"
 	"awesome-shortener/internal/middleware"
+	"awesome-shortener/internal/service"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 )
 
-var urls = make(map[string]string)
+var storage *service.FileStorage
 var cfg *config.Config
 
 // ShortenRequest представляет запрос на сокращение URL в JSON формате
@@ -66,8 +67,14 @@ func createShortURL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := generateID()
-	urls[id] = originalURL
 	shortURL := fmt.Sprintf("%s/%s", cfg.BaseURL, id)
+	
+	// Сохраняем в файловое хранилище
+	if err := storage.Store(id, originalURL); err != nil {
+		log.Printf("Ошибка сохранения в файл: %v", err)
+		http.Error(w, "Internal Server Error", 500)
+		return
+	}
 
 	// Возвращаем ответ в том же формате, что и запрос
 	if strings.Contains(contentType, "application/json") {
@@ -98,8 +105,14 @@ func createShortURLJSON(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := generateID()
-	urls[id] = originalURL
 	shortURL := fmt.Sprintf("%s/%s", cfg.BaseURL, id)
+	
+	// Сохраняем в файловое хранилище
+	if err := storage.Store(id, originalURL); err != nil {
+		log.Printf("Ошибка сохранения в файл: %v", err)
+		http.Error(w, "Internal Server Error", 500)
+		return
+	}
 
 	// Возвращаем JSON ответ
 	w.Header().Set("Content-Type", "application/json")
@@ -115,7 +128,7 @@ func createShortURLJSON(w http.ResponseWriter, r *http.Request) {
 func redirectToOriginal(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	
-	if originalURL, ok := urls[id]; ok {
+	if originalURL, ok := storage.Get(id); ok {
 		w.Header().Set("Location", originalURL)
 		w.WriteHeader(307)
 	} else {
@@ -129,6 +142,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("Ошибка инициализации конфигурации: %v", err)
 	}
+
+	// Инициализируем файловое хранилище
+	storage = service.NewFileStorage(cfg.FileStoragePath)
 
 	// Инициализируем zap логгер
 	logger, err := zap.NewProduction()
