@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 
 	"awesome-shortener/internal/model"
@@ -116,8 +117,9 @@ func (fs *FileStorage) saveToFile() error {
 	}
 	
 	// Создаем директорию если не существует
-	if err := os.MkdirAll(fs.filePath[:len(fs.filePath)-len("/short-url-db.json")], 0755); err != nil {
-		// Если не удалось создать директорию, попробуем записать в текущую
+	dir := filepath.Dir(fs.filePath)
+	if dir != "." && dir != "" {
+		os.MkdirAll(dir, 0755) // Игнорируем ошибку, попробуем записать в любом случае
 	}
 	
 	if err := os.WriteFile(fs.filePath, data, 0644); err != nil {
