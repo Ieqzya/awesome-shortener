@@ -41,15 +41,15 @@ func NewConfig() (*Config, error) {
 	flag.Parse()
 
 	// Переопределяем переменными окружения (наивысший приоритет)
-	if envServerAddr := os.Getenv("SERVER_ADDRESS"); envServerAddr != "" {
+	if envServerAddr := strings.TrimSpace(os.Getenv("SERVER_ADDRESS")); envServerAddr != "" {
 		cfg.ServerAddress = envServerAddr
 	}
 
-	if envBaseURL := os.Getenv("BASE_URL"); envBaseURL != "" {
+	if envBaseURL := strings.TrimSpace(os.Getenv("BASE_URL")); envBaseURL != "" {
 		cfg.BaseURL = envBaseURL
 	}
 
-	if envFileStoragePath := os.Getenv("FILE_STORAGE_PATH"); envFileStoragePath != "" {
+	if envFileStoragePath := strings.TrimSpace(os.Getenv("FILE_STORAGE_PATH")); envFileStoragePath != "" {
 		cfg.FileStoragePath = envFileStoragePath
 	}
 

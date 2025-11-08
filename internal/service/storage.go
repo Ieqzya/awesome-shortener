@@ -8,15 +8,19 @@ import (
 	"sync"
 
 	"awesome-shortener/internal/model"
+	"awesome-shortener/internal/repository"
 )
+
+// Убеждаемся, что FileStorage реализует интерфейс Storage
+var _ repository.Storage = (*FileStorage)(nil)
 
 // FileStorage представляет файловое хранилище URL
 type FileStorage struct {
 	filePath string
 	urls     map[string]string // shortURL -> originalURL
-	records  map[string]*model.URLRecord // shortURL -> URLRecord
 	counter  int
 	mutex    sync.RWMutex
+	file     *os.File // файл для записи в append режиме
 }
 
 // NewFileStorage создает новое файловое хранилище
@@ -24,14 +28,44 @@ func NewFileStorage(filePath string) *FileStorage {
 	fs := &FileStorage{
 		filePath: filePath,
 		urls:     make(map[string]string),
-		records:  make(map[string]*model.URLRecord),
 		counter:  0,
 	}
 	
 	// Загружаем данные из файла при инициализации
 	fs.loadFromFile()
 	
+	// Открываем файл для записи в append режиме
+	fs.openFileForAppend()
+	
 	return fs
+}
+
+// openFileForAppend открывает файл для записи в append режиме
+func (fs *FileStorage) openFileForAppend() error {
+	// Создаем директорию если не существует
+	dir := filepath.Dir(fs.filePath)
+	if dir != "." && dir != "" {
+		os.MkdirAll(dir, 0755)
+	}
+	
+	file, err := os.OpenFile(fs.filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return err
+	}
+	
+	fs.file = file
+	return nil
+}
+
+// Close закрывает файл
+func (fs *FileStorage) Close() error {
+	fs.mutex.Lock()
+	defer fs.mutex.Unlock()
+	
+	if fs.file != nil {
+		return fs.file.Close()
+	}
+	return nil
 }
 
 // Store сохраняет URL в хранилище
@@ -42,16 +76,17 @@ func (fs *FileStorage) Store(shortURL, originalURL string) error {
 	fs.counter++
 	uuid := fmt.Sprintf("%d", fs.counter)
 	
-	record := &model.URLRecord{
+	record := model.URLRecord{
 		UUID:        uuid,
 		ShortURL:    shortURL,
 		OriginalURL: originalURL,
 	}
 	
+	// Сохраняем в память
 	fs.urls[shortURL] = originalURL
-	fs.records[shortURL] = record
 	
-	return fs.saveToFile()
+	// Записываем в файл в NDJSON формате (одна строка JSON)
+	return fs.appendToFile(record)
 }
 
 // Get получает оригинальный URL по короткому
@@ -63,33 +98,32 @@ func (fs *FileStorage) Get(shortURL string) (string, bool) {
 	return originalURL, exists
 }
 
-// loadFromFile загружает данные из файла
+// loadFromFile загружает данные из файла в NDJSON формате
 func (fs *FileStorage) loadFromFile() error {
 	if _, err := os.Stat(fs.filePath); os.IsNotExist(err) {
 		// Файл не существует, это нормально для первого запуска
 		return nil
 	}
 	
-	data, err := os.ReadFile(fs.filePath)
+	file, err := os.Open(fs.filePath)
 	if err != nil {
-		return fmt.Errorf("ошибка чтения файла: %w", err)
+		return fmt.Errorf("ошибка открытия файла: %w", err)
 	}
+	defer file.Close()
 	
-	if len(data) == 0 {
-		// Пустой файл
-		return nil
-	}
-	
-	var records []model.URLRecord
-	if err := json.Unmarshal(data, &records); err != nil {
-		return fmt.Errorf("ошибка парсинга JSON: %w", err)
-	}
-	
-	// Восстанавливаем данные в память
+	decoder := json.NewDecoder(file)
 	maxUUID := 0
-	for _, record := range records {
+	
+	// Читаем файл построчно (NDJSON)
+	for decoder.More() {
+		var record model.URLRecord
+		if err := decoder.Decode(&record); err != nil {
+			// Пропускаем поврежденные строки
+			continue
+		}
+		
+		// Восстанавливаем данные в память
 		fs.urls[record.ShortURL] = record.OriginalURL
-		fs.records[record.ShortURL] = &record
 		
 		// Находим максимальный UUID для продолжения счетчика
 		var uuid int
@@ -104,27 +138,28 @@ func (fs *FileStorage) loadFromFile() error {
 	return nil
 }
 
-// saveToFile сохраняет данные в файл
-func (fs *FileStorage) saveToFile() error {
-	records := make([]model.URLRecord, 0, len(fs.records))
-	for _, record := range fs.records {
-		records = append(records, *record)
+// appendToFile добавляет новую запись в конец файла в NDJSON формате
+func (fs *FileStorage) appendToFile(record model.URLRecord) error {
+	if fs.file == nil {
+		if err := fs.openFileForAppend(); err != nil {
+			return fmt.Errorf("ошибка открытия файла: %w", err)
+		}
 	}
 	
-	data, err := json.MarshalIndent(records, "", "  ")
+	// Сериализуем запись в JSON
+	data, err := json.Marshal(record)
 	if err != nil {
 		return fmt.Errorf("ошибка сериализации JSON: %w", err)
 	}
 	
-	// Создаем директорию если не существует
-	dir := filepath.Dir(fs.filePath)
-	if dir != "." && dir != "" {
-		os.MkdirAll(dir, 0755) // Игнорируем ошибку, попробуем записать в любом случае
+	// Добавляем перенос строки для NDJSON формата
+	data = append(data, '\n')
+	
+	// Записываем в файл
+	if _, err := fs.file.Write(data); err != nil {
+		return fmt.Errorf("ошибка записи в файл: %w", err)
 	}
 	
-	if err := os.WriteFile(fs.filePath, data, 0644); err != nil {
-		return fmt.Errorf("ошибка записи файла: %w", err)
-	}
-	
-	return nil
+	// Принудительно сбрасываем буфер на диск
+	return fs.file.Sync()
 }

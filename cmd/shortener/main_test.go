@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"awesome-shortener/internal/config"
+	"awesome-shortener/internal/handler"
 	"awesome-shortener/internal/middleware"
 	"awesome-shortener/internal/service"
 	"github.com/go-chi/chi/v5"
@@ -26,13 +27,19 @@ func init() {
 }
 
 func TestCreateShortURL(t *testing.T) {
-	storage = service.NewFileStorage("/tmp/test-short-url-db-1.json")
+	cfg := &config.Config{
+		ServerAddress:   config.DefaultServerAddress,
+		BaseURL:         config.DefaultBaseURL,
+		FileStoragePath: "/tmp/test-short-url-db-1.json",
+	}
+	storage := service.NewFileStorage(cfg.FileStoragePath)
+	app := handler.NewApp(cfg, storage)
 
 	body := strings.NewReader("https://google.com")
 	req := httptest.NewRequest("POST", "/", body)
 	w := httptest.NewRecorder()
 
-	createShortURL(w, req)
+	app.CreateShortURL(w, req)
 
 	if w.Code != 201 {
 		t.Errorf("Ожидали код 201, получили %d", w.Code)
@@ -45,10 +52,18 @@ func TestCreateShortURL(t *testing.T) {
 }
 
 func TestCreateShortURLBadRequest(t *testing.T) {
+	cfg := &config.Config{
+		ServerAddress:   config.DefaultServerAddress,
+		BaseURL:         config.DefaultBaseURL,
+		FileStoragePath: "/tmp/test-short-url-db-bad-req.json",
+	}
+	storage := service.NewFileStorage(cfg.FileStoragePath)
+	app := handler.NewApp(cfg, storage)
+
 	req := httptest.NewRequest("POST", "/", strings.NewReader(""))
 	w := httptest.NewRecorder()
 
-	createShortURL(w, req)
+	app.CreateShortURL(w, req)
 
 	if w.Code != 400 {
 		t.Errorf("Ожидали код 400, получили %d", w.Code)
@@ -56,11 +71,17 @@ func TestCreateShortURLBadRequest(t *testing.T) {
 }
 
 func TestRedirectToOriginal(t *testing.T) {
-	storage = service.NewFileStorage("/tmp/test-short-url-db-2.json")
+	cfg := &config.Config{
+		ServerAddress:   config.DefaultServerAddress,
+		BaseURL:         config.DefaultBaseURL,
+		FileStoragePath: "/tmp/test-short-url-db-2.json",
+	}
+	storage := service.NewFileStorage(cfg.FileStoragePath)
 	storage.Store("test123", "https://example.com")
+	app := handler.NewApp(cfg, storage)
 
 	r := chi.NewRouter()
-	r.Get("/{id}", redirectToOriginal)
+	r.Get("/{id}", app.RedirectToOriginal)
 
 	req := httptest.NewRequest("GET", "/test123", nil)
 	w := httptest.NewRecorder()
@@ -77,10 +98,16 @@ func TestRedirectToOriginal(t *testing.T) {
 }
 
 func TestRedirectNotFound(t *testing.T) {
-	storage = service.NewFileStorage("/tmp/test-short-url-db-3.json")
+	cfg := &config.Config{
+		ServerAddress:   config.DefaultServerAddress,
+		BaseURL:         config.DefaultBaseURL,
+		FileStoragePath: "/tmp/test-short-url-db-3.json",
+	}
+	storage := service.NewFileStorage(cfg.FileStoragePath)
+	app := handler.NewApp(cfg, storage)
 
 	r := chi.NewRouter()
-	r.Get("/{id}", redirectToOriginal)
+	r.Get("/{id}", app.RedirectToOriginal)
 
 	req := httptest.NewRequest("GET", "/notfound", nil)
 	w := httptest.NewRecorder()
@@ -93,14 +120,20 @@ func TestRedirectNotFound(t *testing.T) {
 }
 
 func TestCreateShortURLJSON(t *testing.T) {
-	storage = service.NewFileStorage("/tmp/test-short-url-db-4.json")
+	cfg := &config.Config{
+		ServerAddress:   config.DefaultServerAddress,
+		BaseURL:         config.DefaultBaseURL,
+		FileStoragePath: "/tmp/test-short-url-db-4.json",
+	}
+	storage := service.NewFileStorage(cfg.FileStoragePath)
+	app := handler.NewApp(cfg, storage)
 
 	jsonBody := `{"url":"https://practicum.yandex.ru"}`
 	req := httptest.NewRequest("POST", "/api/shorten", strings.NewReader(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
-	createShortURLJSON(w, req)
+	app.CreateShortURLJSON(w, req)
 
 	if w.Code != 201 {
 		t.Errorf("Ожидали код 201, получили %d", w.Code)
@@ -110,7 +143,7 @@ func TestCreateShortURLJSON(t *testing.T) {
 		t.Errorf("Ожидали Content-Type: application/json, получили %s", w.Header().Get("Content-Type"))
 	}
 
-	var response ShortenResponse
+	var response handler.ShortenResponse
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Errorf("Ошибка декодирования JSON ответа: %v", err)
 	}
@@ -121,12 +154,20 @@ func TestCreateShortURLJSON(t *testing.T) {
 }
 
 func TestCreateShortURLJSONBadRequest(t *testing.T) {
+	cfg := &config.Config{
+		ServerAddress:   config.DefaultServerAddress,
+		BaseURL:         config.DefaultBaseURL,
+		FileStoragePath: "/tmp/test-short-url-db-bad.json",
+	}
+	storage := service.NewFileStorage(cfg.FileStoragePath)
+	app := handler.NewApp(cfg, storage)
+
 	// Тест с невалидным JSON
 	req := httptest.NewRequest("POST", "/api/shorten", strings.NewReader(`{"invalid": json}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
-	createShortURLJSON(w, req)
+	app.CreateShortURLJSON(w, req)
 
 	if w.Code != 400 {
 		t.Errorf("Ожидали код 400, получили %d", w.Code)
@@ -134,13 +175,21 @@ func TestCreateShortURLJSONBadRequest(t *testing.T) {
 }
 
 func TestCreateShortURLJSONEmptyURL(t *testing.T) {
+	cfg := &config.Config{
+		ServerAddress:   config.DefaultServerAddress,
+		BaseURL:         config.DefaultBaseURL,
+		FileStoragePath: "/tmp/test-short-url-db-empty.json",
+	}
+	storage := service.NewFileStorage(cfg.FileStoragePath)
+	app := handler.NewApp(cfg, storage)
+
 	// Тест с пустым URL
 	jsonBody := `{"url":""}`
 	req := httptest.NewRequest("POST", "/api/shorten", strings.NewReader(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
-	createShortURLJSON(w, req)
+	app.CreateShortURLJSON(w, req)
 
 	if w.Code != 400 {
 		t.Errorf("Ожидали код 400, получили %d", w.Code)
@@ -148,14 +197,20 @@ func TestCreateShortURLJSONEmptyURL(t *testing.T) {
 }
 
 func TestGzipCompression(t *testing.T) {
-	storage = service.NewFileStorage("/tmp/test-short-url-db-5.json")
+	cfg := &config.Config{
+		ServerAddress:   config.DefaultServerAddress,
+		BaseURL:         config.DefaultBaseURL,
+		FileStoragePath: "/tmp/test-short-url-db-5.json",
+	}
+	storage := service.NewFileStorage(cfg.FileStoragePath)
+	app := handler.NewApp(cfg, storage)
 
 	// Создаем роутер с middleware
 	logger, _ := zap.NewProduction()
 	r := chi.NewRouter()
 	r.Use(middleware.GzipMiddleware)
 	r.Use(middleware.Logger(logger))
-	r.Post("/api/shorten", createShortURLJSON)
+	r.Post("/api/shorten", app.CreateShortURLJSON)
 
 	jsonBody := `{"url":"https://practicum.yandex.ru"}`
 	req := httptest.NewRequest("POST", "/api/shorten", strings.NewReader(jsonBody))
@@ -185,7 +240,7 @@ func TestGzipCompression(t *testing.T) {
 		t.Errorf("Ошибка чтения сжатых данных: %v", err)
 	}
 
-	var response ShortenResponse
+	var response handler.ShortenResponse
 	if err := json.Unmarshal(decompressed, &response); err != nil {
 		t.Errorf("Ошибка декодирования JSON ответа: %v", err)
 	}
@@ -196,14 +251,20 @@ func TestGzipCompression(t *testing.T) {
 }
 
 func TestGzipDecompression(t *testing.T) {
-	storage = service.NewFileStorage("/tmp/test-short-url-db-6.json")
+	cfg := &config.Config{
+		ServerAddress:   config.DefaultServerAddress,
+		BaseURL:         config.DefaultBaseURL,
+		FileStoragePath: "/tmp/test-short-url-db-6.json",
+	}
+	storage := service.NewFileStorage(cfg.FileStoragePath)
+	app := handler.NewApp(cfg, storage)
 
 	// Создаем роутер с middleware
 	logger, _ := zap.NewProduction()
 	r := chi.NewRouter()
 	r.Use(middleware.GzipMiddleware)
 	r.Use(middleware.Logger(logger))
-	r.Post("/api/shorten", createShortURLJSON)
+	r.Post("/api/shorten", app.CreateShortURLJSON)
 
 	// Сжимаем тело запроса
 	jsonBody := `{"url":"https://practicum.yandex.ru"}`
@@ -223,7 +284,7 @@ func TestGzipDecompression(t *testing.T) {
 		t.Errorf("Ожидали код 201, получили %d", w.Code)
 	}
 
-	var response ShortenResponse
+	var response handler.ShortenResponse
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Errorf("Ошибка декодирования JSON ответа: %v", err)
 	}
