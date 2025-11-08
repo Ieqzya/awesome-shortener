@@ -17,15 +17,6 @@ import (
 	"go.uber.org/zap"
 )
 
-func init() {
-	// Инициализируем конфигурацию для тестов
-	cfg = &config.Config{
-		ServerAddress:   config.DefaultServerAddress,
-		BaseURL:         config.DefaultBaseURL,
-		FileStoragePath: "/tmp/test-short-url-db.json",
-	}
-}
-
 func TestCreateShortURL(t *testing.T) {
 	cfg := &config.Config{
 		ServerAddress:   config.DefaultServerAddress,
