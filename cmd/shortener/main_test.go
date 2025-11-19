@@ -276,8 +276,8 @@ func TestGzipDecompression(t *testing.T) {
 		t.Errorf("Неправильный ответ: %s", response.Result)
 	}
 }
-fun
-c TestCreateShortURLBatchIntegration(t *testing.T) {
+
+func TestCreateShortURLBatchIntegration(t *testing.T) {
 	cfg := &config.Config{
 		ServerAddress: config.DefaultServerAddress,
 		BaseURL:       config.DefaultBaseURL,
