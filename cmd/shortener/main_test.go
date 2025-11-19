@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http/httptest"
@@ -12,19 +13,18 @@ import (
 	"awesome-shortener/internal/config"
 	"awesome-shortener/internal/handler"
 	"awesome-shortener/internal/middleware"
-	"awesome-shortener/internal/service"
+	"awesome-shortener/internal/storage"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 )
 
 func TestCreateShortURL(t *testing.T) {
 	cfg := &config.Config{
-		ServerAddress:   config.DefaultServerAddress,
-		BaseURL:         config.DefaultBaseURL,
-		FileStoragePath: "/tmp/test-short-url-db-1.json",
+		ServerAddress: config.DefaultServerAddress,
+		BaseURL:       config.DefaultBaseURL,
 	}
-	storage := service.NewFileStorage(cfg.FileStoragePath)
-	app := handler.NewApp(cfg, storage)
+	store := storage.NewMemoryStorage()
+	app := handler.NewApp(cfg, store)
 
 	body := strings.NewReader("https://google.com")
 	req := httptest.NewRequest("POST", "/", body)
@@ -44,12 +44,11 @@ func TestCreateShortURL(t *testing.T) {
 
 func TestCreateShortURLBadRequest(t *testing.T) {
 	cfg := &config.Config{
-		ServerAddress:   config.DefaultServerAddress,
-		BaseURL:         config.DefaultBaseURL,
-		FileStoragePath: "/tmp/test-short-url-db-bad-req.json",
+		ServerAddress: config.DefaultServerAddress,
+		BaseURL:       config.DefaultBaseURL,
 	}
-	storage := service.NewFileStorage(cfg.FileStoragePath)
-	app := handler.NewApp(cfg, storage)
+	store := storage.NewMemoryStorage()
+	app := handler.NewApp(cfg, store)
 
 	req := httptest.NewRequest("POST", "/", strings.NewReader(""))
 	w := httptest.NewRecorder()
@@ -63,13 +62,12 @@ func TestCreateShortURLBadRequest(t *testing.T) {
 
 func TestRedirectToOriginal(t *testing.T) {
 	cfg := &config.Config{
-		ServerAddress:   config.DefaultServerAddress,
-		BaseURL:         config.DefaultBaseURL,
-		FileStoragePath: "/tmp/test-short-url-db-2.json",
+		ServerAddress: config.DefaultServerAddress,
+		BaseURL:       config.DefaultBaseURL,
 	}
-	storage := service.NewFileStorage(cfg.FileStoragePath)
-	storage.Store("test123", "https://example.com")
-	app := handler.NewApp(cfg, storage)
+	store := storage.NewMemoryStorage()
+	store.SaveURL(context.Background(), "test123", "https://example.com")
+	app := handler.NewApp(cfg, store)
 
 	r := chi.NewRouter()
 	r.Get("/{id}", app.RedirectToOriginal)
@@ -90,12 +88,11 @@ func TestRedirectToOriginal(t *testing.T) {
 
 func TestRedirectNotFound(t *testing.T) {
 	cfg := &config.Config{
-		ServerAddress:   config.DefaultServerAddress,
-		BaseURL:         config.DefaultBaseURL,
-		FileStoragePath: "/tmp/test-short-url-db-3.json",
+		ServerAddress: config.DefaultServerAddress,
+		BaseURL:       config.DefaultBaseURL,
 	}
-	storage := service.NewFileStorage(cfg.FileStoragePath)
-	app := handler.NewApp(cfg, storage)
+	store := storage.NewMemoryStorage()
+	app := handler.NewApp(cfg, store)
 
 	r := chi.NewRouter()
 	r.Get("/{id}", app.RedirectToOriginal)
@@ -112,12 +109,11 @@ func TestRedirectNotFound(t *testing.T) {
 
 func TestCreateShortURLJSON(t *testing.T) {
 	cfg := &config.Config{
-		ServerAddress:   config.DefaultServerAddress,
-		BaseURL:         config.DefaultBaseURL,
-		FileStoragePath: "/tmp/test-short-url-db-4.json",
+		ServerAddress: config.DefaultServerAddress,
+		BaseURL:       config.DefaultBaseURL,
 	}
-	storage := service.NewFileStorage(cfg.FileStoragePath)
-	app := handler.NewApp(cfg, storage)
+	store := storage.NewMemoryStorage()
+	app := handler.NewApp(cfg, store)
 
 	jsonBody := `{"url":"https://practicum.yandex.ru"}`
 	req := httptest.NewRequest("POST", "/api/shorten", strings.NewReader(jsonBody))
@@ -146,12 +142,11 @@ func TestCreateShortURLJSON(t *testing.T) {
 
 func TestCreateShortURLJSONBadRequest(t *testing.T) {
 	cfg := &config.Config{
-		ServerAddress:   config.DefaultServerAddress,
-		BaseURL:         config.DefaultBaseURL,
-		FileStoragePath: "/tmp/test-short-url-db-bad.json",
+		ServerAddress: config.DefaultServerAddress,
+		BaseURL:       config.DefaultBaseURL,
 	}
-	storage := service.NewFileStorage(cfg.FileStoragePath)
-	app := handler.NewApp(cfg, storage)
+	store := storage.NewMemoryStorage()
+	app := handler.NewApp(cfg, store)
 
 	// Тест с невалидным JSON
 	req := httptest.NewRequest("POST", "/api/shorten", strings.NewReader(`{"invalid": json}`))
@@ -167,12 +162,11 @@ func TestCreateShortURLJSONBadRequest(t *testing.T) {
 
 func TestCreateShortURLJSONEmptyURL(t *testing.T) {
 	cfg := &config.Config{
-		ServerAddress:   config.DefaultServerAddress,
-		BaseURL:         config.DefaultBaseURL,
-		FileStoragePath: "/tmp/test-short-url-db-empty.json",
+		ServerAddress: config.DefaultServerAddress,
+		BaseURL:       config.DefaultBaseURL,
 	}
-	storage := service.NewFileStorage(cfg.FileStoragePath)
-	app := handler.NewApp(cfg, storage)
+	store := storage.NewMemoryStorage()
+	app := handler.NewApp(cfg, store)
 
 	// Тест с пустым URL
 	jsonBody := `{"url":""}`
@@ -189,12 +183,11 @@ func TestCreateShortURLJSONEmptyURL(t *testing.T) {
 
 func TestGzipCompression(t *testing.T) {
 	cfg := &config.Config{
-		ServerAddress:   config.DefaultServerAddress,
-		BaseURL:         config.DefaultBaseURL,
-		FileStoragePath: "/tmp/test-short-url-db-5.json",
+		ServerAddress: config.DefaultServerAddress,
+		BaseURL:       config.DefaultBaseURL,
 	}
-	storage := service.NewFileStorage(cfg.FileStoragePath)
-	app := handler.NewApp(cfg, storage)
+	store := storage.NewMemoryStorage()
+	app := handler.NewApp(cfg, store)
 
 	// Создаем роутер с middleware
 	logger, _ := zap.NewProduction()
@@ -243,12 +236,11 @@ func TestGzipCompression(t *testing.T) {
 
 func TestGzipDecompression(t *testing.T) {
 	cfg := &config.Config{
-		ServerAddress:   config.DefaultServerAddress,
-		BaseURL:         config.DefaultBaseURL,
-		FileStoragePath: "/tmp/test-short-url-db-6.json",
+		ServerAddress: config.DefaultServerAddress,
+		BaseURL:       config.DefaultBaseURL,
 	}
-	storage := service.NewFileStorage(cfg.FileStoragePath)
-	app := handler.NewApp(cfg, storage)
+	store := storage.NewMemoryStorage()
+	app := handler.NewApp(cfg, store)
 
 	// Создаем роутер с middleware
 	logger, _ := zap.NewProduction()

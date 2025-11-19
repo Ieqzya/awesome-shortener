@@ -8,7 +8,6 @@ import (
 	"awesome-shortener/internal/config"
 	"awesome-shortener/internal/handler"
 	"awesome-shortener/internal/middleware"
-	"awesome-shortener/internal/service"
 	"awesome-shortener/internal/storage"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
