@@ -276,3 +276,62 @@ func TestGzipDecompression(t *testing.T) {
 		t.Errorf("Неправильный ответ: %s", response.Result)
 	}
 }
+fun
+c TestCreateShortURLBatchIntegration(t *testing.T) {
+	cfg := &config.Config{
+		ServerAddress: config.DefaultServerAddress,
+		BaseURL:       config.DefaultBaseURL,
+	}
+	store := storage.NewMemoryStorage()
+	app := handler.NewApp(cfg, store)
+
+	// Создаем роутер с middleware
+	logger, _ := zap.NewProduction()
+	r := chi.NewRouter()
+	r.Use(middleware.GzipMiddleware)
+	r.Use(middleware.Logger(logger))
+	r.Post("/api/shorten/batch", app.CreateShortURLBatch)
+
+	// Подготавливаем batch запрос
+	requests := []handler.BatchShortenRequest{
+		{
+			CorrelationID: "test-id-1",
+			OriginalURL:   "https://example1.com",
+		},
+		{
+			CorrelationID: "test-id-2",
+			OriginalURL:   "https://example2.com",
+		},
+	}
+
+	body, _ := json.Marshal(requests)
+	req := httptest.NewRequest("POST", "/api/shorten/batch", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != 201 {
+		t.Errorf("Ожидали код 201, получили %d", w.Code)
+	}
+
+	var responses []handler.BatchShortenResponse
+	if err := json.NewDecoder(w.Body).Decode(&responses); err != nil {
+		t.Fatalf("Ошибка декодирования ответа: %v", err)
+	}
+
+	if len(responses) != 2 {
+		t.Errorf("Ожидали 2 элемента в ответе, получили %d", len(responses))
+	}
+
+	// Проверяем correlation_id и short_url
+	for i, resp := range responses {
+		if resp.CorrelationID != requests[i].CorrelationID {
+			t.Errorf("Неправильный correlation_id: ожидали %s, получили %s",
+				requests[i].CorrelationID, resp.CorrelationID)
+		}
+		if !strings.Contains(resp.ShortURL, "http://localhost:8080/") {
+			t.Errorf("Неправильный short_url: %s", resp.ShortURL)
+		}
+	}
+}

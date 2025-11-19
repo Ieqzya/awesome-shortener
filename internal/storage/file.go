@@ -101,6 +101,34 @@ func (f *FileStorage) GetURL(ctx context.Context, shortID string) (string, error
 	return url, nil
 }
 
+// SaveBatch сохраняет множество URL в файл
+func (f *FileStorage) SaveBatch(ctx context.Context, items []BatchItem) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	for _, item := range items {
+		// Сохраняем в памяти
+		f.urls[item.ShortID] = item.OriginalURL
+
+		// Записываем в файл
+		record := URLRecord{
+			ShortID:     item.ShortID,
+			OriginalURL: item.OriginalURL,
+		}
+
+		data, err := json.Marshal(record)
+		if err != nil {
+			return fmt.Errorf("ошибка сериализации: %w", err)
+		}
+
+		if _, err := f.file.Write(append(data, '\n')); err != nil {
+			return fmt.Errorf("ошибка записи в файл: %w", err)
+		}
+	}
+
+	return nil
+}
+
 // Close закрывает файл
 func (f *FileStorage) Close() error {
 	if f.file != nil {

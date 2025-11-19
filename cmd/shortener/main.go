@@ -77,6 +77,7 @@ func main() {
 	// Регистрируем обработчики
 	r.Post("/", app.CreateShortURL)
 	r.Post("/api/shorten", app.CreateShortURLJSON)
+	r.Post("/api/shorten/batch", app.CreateShortURLBatch)
 	r.Get("/{id}", app.RedirectToOriginal)
 	
 	// Добавляем хендлер для проверки соединения с БД

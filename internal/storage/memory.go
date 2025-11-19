@@ -39,6 +39,17 @@ func (m *MemoryStorage) GetURL(ctx context.Context, shortID string) (string, err
 	return url, nil
 }
 
+// SaveBatch сохраняет множество URL в памяти
+func (m *MemoryStorage) SaveBatch(ctx context.Context, items []BatchItem) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	
+	for _, item := range items {
+		m.urls[item.ShortID] = item.OriginalURL
+	}
+	return nil
+}
+
 // Close закрывает хранилище (для памяти ничего не делает)
 func (m *MemoryStorage) Close() error {
 	return nil

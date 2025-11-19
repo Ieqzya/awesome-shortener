@@ -39,6 +39,18 @@ type ShortenResponse struct {
 	Result string `json:"result"`
 }
 
+// BatchShortenRequest представляет элемент запроса для batch сокращения
+type BatchShortenRequest struct {
+	CorrelationID string `json:"correlation_id"`
+	OriginalURL   string `json:"original_url"`
+}
+
+// BatchShortenResponse представляет элемент ответа для batch сокращения
+type BatchShortenResponse struct {
+	CorrelationID string `json:"correlation_id"`
+	ShortURL      string `json:"short_url"`
+}
+
 func generateID() string {
 	const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	result := make([]byte, 8)
@@ -132,6 +144,66 @@ func (app *App) CreateShortURLJSON(w http.ResponseWriter, r *http.Request) {
 	
 	response := ShortenResponse{Result: shortURL}
 	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+}
+
+// CreateShortURLBatch обрабатывает batch создание коротких URL
+func (app *App) CreateShortURLBatch(w http.ResponseWriter, r *http.Request) {
+	var requests []BatchShortenRequest
+	
+	// Декодируем JSON из тела запроса
+	if err := json.NewDecoder(r.Body).Decode(&requests); err != nil {
+		http.Error(w, "Bad Request", http.StatusBadRequest)
+		return
+	}
+	
+	// Проверяем, что батч не пустой
+	if len(requests) == 0 {
+		http.Error(w, "Bad Request", http.StatusBadRequest)
+		return
+	}
+	
+	// Подготавливаем данные для сохранения
+	batchItems := make([]storage.BatchItem, 0, len(requests))
+	responses := make([]BatchShortenResponse, 0, len(requests))
+	
+	for _, req := range requests {
+		originalURL := strings.TrimSpace(req.OriginalURL)
+		if originalURL == "" {
+			http.Error(w, "Bad Request", http.StatusBadRequest)
+			return
+		}
+		
+		// Генерируем ID
+		id := generateID()
+		shortURL := fmt.Sprintf("%s/%s", app.config.BaseURL, id)
+		
+		batchItems = append(batchItems, storage.BatchItem{
+			CorrelationID: req.CorrelationID,
+			ShortID:       id,
+			OriginalURL:   originalURL,
+		})
+		
+		responses = append(responses, BatchShortenResponse{
+			CorrelationID: req.CorrelationID,
+			ShortURL:      shortURL,
+		})
+	}
+	
+	// Сохраняем все URL в хранилище
+	if err := app.storage.SaveBatch(r.Context(), batchItems); err != nil {
+		log.Printf("Ошибка сохранения batch в хранилище: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	
+	// Возвращаем JSON ответ
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	
+	if err := json.NewEncoder(w).Encode(responses); err != nil {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}

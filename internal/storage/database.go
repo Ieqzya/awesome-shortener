@@ -95,6 +95,41 @@ func (d *Database) GetURL(ctx context.Context, shortID string) (string, error) {
 	return originalURL, nil
 }
 
+// SaveBatch сохраняет множество URL в одной транзакции
+func (d *Database) SaveBatch(ctx context.Context, items []BatchItem) error {
+	if len(items) == 0 {
+		return nil
+	}
+
+	// Начинаем транзакцию
+	tx, err := d.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("ошибка начала транзакции: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Подготавливаем запрос
+	stmt, err := tx.PrepareContext(ctx, `INSERT INTO urls (short_id, original_url) VALUES ($1, $2)`)
+	if err != nil {
+		return fmt.Errorf("ошибка подготовки запроса: %w", err)
+	}
+	defer stmt.Close()
+
+	// Выполняем вставку для каждого элемента
+	for _, item := range items {
+		if _, err := stmt.ExecContext(ctx, item.ShortID, item.OriginalURL); err != nil {
+			return fmt.Errorf("ошибка сохранения URL: %w", err)
+		}
+	}
+
+	// Коммитим транзакцию
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("ошибка коммита транзакции: %w", err)
+	}
+
+	return nil
+}
+
 // Ping проверяет соединение с базой данных
 func (d *Database) Ping(ctx context.Context) error {
 	if d == nil || d.db == nil {
