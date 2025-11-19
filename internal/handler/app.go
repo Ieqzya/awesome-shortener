@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,21 +11,21 @@ import (
 	"strings"
 
 	"awesome-shortener/internal/config"
-	"awesome-shortener/internal/repository"
+	"awesome-shortener/internal/storage"
 	"github.com/go-chi/chi/v5"
 )
 
 // App представляет приложение с зависимостями
 type App struct {
 	config  *config.Config
-	storage repository.Storage
+	storage storage.Storage
 }
 
 // NewApp создает новое приложение
-func NewApp(cfg *config.Config, storage repository.Storage) *App {
+func NewApp(cfg *config.Config, store storage.Storage) *App {
 	return &App{
 		config:  cfg,
-		storage: storage,
+		storage: store,
 	}
 }
 
@@ -48,7 +49,7 @@ func generateID() string {
 }
 
 // shortenURL общая логика для сокращения URL
-func (app *App) shortenURL(originalURL string) (string, error) {
+func (app *App) shortenURL(ctx context.Context, originalURL string) (string, error) {
 	if originalURL == "" {
 		return "", fmt.Errorf("URL не может быть пустым")
 	}
@@ -57,7 +58,7 @@ func (app *App) shortenURL(originalURL string) (string, error) {
 	shortURL := fmt.Sprintf("%s/%s", app.config.BaseURL, id)
 	
 	// Сохраняем в хранилище
-	if err := app.storage.Store(id, originalURL); err != nil {
+	if err := app.storage.SaveURL(ctx, id, originalURL); err != nil {
 		log.Printf("Ошибка сохранения в хранилище: %v", err)
 		return "", fmt.Errorf("ошибка сохранения")
 	}
@@ -89,7 +90,7 @@ func (app *App) CreateShortURL(w http.ResponseWriter, r *http.Request) {
 		originalURL = strings.TrimSpace(string(body))
 	}
 	
-	shortURL, err := app.shortenURL(originalURL)
+	shortURL, err := app.shortenURL(r.Context(), originalURL)
 	if err != nil {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
@@ -119,7 +120,7 @@ func (app *App) CreateShortURLJSON(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	originalURL := strings.TrimSpace(req.URL)
-	shortURL, err := app.shortenURL(originalURL)
+	shortURL, err := app.shortenURL(r.Context(), originalURL)
 	if err != nil {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
@@ -140,10 +141,12 @@ func (app *App) CreateShortURLJSON(w http.ResponseWriter, r *http.Request) {
 func (app *App) RedirectToOriginal(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	
-	if originalURL, ok := app.storage.Get(id); ok {
-		w.Header().Set("Location", originalURL)
-		w.WriteHeader(http.StatusTemporaryRedirect)
-	} else {
+	originalURL, err := app.storage.GetURL(r.Context(), id)
+	if err != nil {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
+		return
 	}
+	
+	w.Header().Set("Location", originalURL)
+	w.WriteHeader(http.StatusTemporaryRedirect)
 }

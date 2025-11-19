@@ -21,22 +21,45 @@ func main() {
 		log.Fatalf("Ошибка инициализации конфигурации: %v", err)
 	}
 
-	// Инициализируем подключение к базе данных (если настроено)
-	db, err := storage.NewDatabase(cfg.DatabaseDSN)
-	if err != nil {
-		log.Fatalf("Ошибка подключения к базе данных: %v", err)
-	}
-	if db != nil {
-		defer db.Close()
-		fmt.Println("Подключение к базе данных установлено")
+	// Выбираем хранилище с fallback логикой:
+	// 1. PostgreSQL (если DATABASE_DSN задан)
+	// 2. Файл (если FILE_STORAGE_PATH задан)
+	// 3. Память (по умолчанию)
+	var store storage.Storage
+	var db *storage.Database
+
+	// Пытаемся подключиться к PostgreSQL
+	if cfg.DatabaseDSN != "" {
+		db, err = storage.NewDatabase(cfg.DatabaseDSN)
+		if err != nil {
+			log.Printf("Предупреждение: не удалось подключиться к БД: %v", err)
+		} else {
+			store = db
+			defer db.Close()
+			fmt.Println("Хранилище: PostgreSQL")
+		}
 	}
 
-	// Инициализируем файловое хранилище
-	fileStorage := service.NewFileStorage(cfg.FileStoragePath)
-	defer fileStorage.Close() // Закрываем файл при завершении
+	// Если БД не подключена, пытаемся использовать файл
+	if store == nil && cfg.FileStoragePath != "" {
+		fileStorage, err := storage.NewFileStorage(cfg.FileStoragePath)
+		if err != nil {
+			log.Printf("Предупреждение: не удалось открыть файл: %v", err)
+		} else {
+			store = fileStorage
+			defer fileStorage.Close()
+			fmt.Printf("Хранилище: файл (%s)\n", cfg.FileStoragePath)
+		}
+	}
+
+	// Если ничего не подключено, используем память
+	if store == nil {
+		store = storage.NewMemoryStorage()
+		fmt.Println("Хранилище: память")
+	}
 
 	// Создаем приложение с dependency injection
-	app := handler.NewApp(cfg, fileStorage)
+	app := handler.NewApp(cfg, store)
 
 	// Инициализируем zap логгер
 	logger, err := zap.NewProduction()

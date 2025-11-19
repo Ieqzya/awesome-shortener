@@ -39,7 +39,60 @@ func NewDatabase(dsn string) (*Database, error) {
 		return nil, fmt.Errorf("ошибка подключения к БД: %w", err)
 	}
 
-	return &Database{db: db}, nil
+	database := &Database{db: db}
+
+	// Выполняем миграции
+	if err := database.runMigrations(ctx); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("ошибка выполнения миграций: %w", err)
+	}
+
+	return database, nil
+}
+
+// runMigrations выполняет миграции базы данных
+func (d *Database) runMigrations(ctx context.Context) error {
+	// Создаем таблицу urls
+	query := `
+		CREATE TABLE IF NOT EXISTS urls (
+			id SERIAL PRIMARY KEY,
+			short_id VARCHAR(255) UNIQUE NOT NULL,
+			original_url TEXT NOT NULL,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE INDEX IF NOT EXISTS idx_short_id ON urls(short_id);
+	`
+
+	_, err := d.db.ExecContext(ctx, query)
+	if err != nil {
+		return fmt.Errorf("ошибка создания таблицы: %w", err)
+	}
+
+	return nil
+}
+
+// SaveURL сохраняет URL в базу данных
+func (d *Database) SaveURL(ctx context.Context, shortID, originalURL string) error {
+	query := `INSERT INTO urls (short_id, original_url) VALUES ($1, $2)`
+	_, err := d.db.ExecContext(ctx, query, shortID, originalURL)
+	if err != nil {
+		return fmt.Errorf("ошибка сохранения URL: %w", err)
+	}
+	return nil
+}
+
+// GetURL получает оригинальный URL по короткому ID
+func (d *Database) GetURL(ctx context.Context, shortID string) (string, error) {
+	var originalURL string
+	query := `SELECT original_url FROM urls WHERE short_id = $1`
+	err := d.db.QueryRowContext(ctx, query, shortID).Scan(&originalURL)
+	if err == sql.ErrNoRows {
+		return "", fmt.Errorf("URL не найден")
+	}
+	if err != nil {
+		return "", fmt.Errorf("ошибка получения URL: %w", err)
+	}
+	return originalURL, nil
 }
 
 // Ping проверяет соединение с базой данных
