@@ -10,9 +10,10 @@ import (
 
 // Константы с дефолтными значениями
 const (
-	DefaultServerAddress    = "localhost:8080"
-	DefaultBaseURL          = "http://localhost:8080"
-	DefaultFileStoragePath  = "/tmp/short-url-db.json"
+	DefaultServerAddress   = "localhost:8080"
+	DefaultBaseURL         = "http://localhost:8080"
+	DefaultFileStoragePath = "/tmp/short-url-db.json"
+	DefaultDatabaseDSN     = ""
 )
 
 // Config содержит конфигурацию сервиса
@@ -20,6 +21,7 @@ type Config struct {
 	ServerAddress   string // адрес запуска HTTP-сервера
 	BaseURL         string // базовый адрес результирующего сокращённого URL
 	FileStoragePath string // путь до файла с данными
+	DatabaseDSN     string // строка подключения к базе данных
 }
 
 // NewConfig создает и инициализирует конфигурацию с приоритетом:
@@ -33,11 +35,13 @@ func NewConfig() (*Config, error) {
 	cfg.ServerAddress = DefaultServerAddress
 	cfg.BaseURL = DefaultBaseURL
 	cfg.FileStoragePath = DefaultFileStoragePath
+	cfg.DatabaseDSN = DefaultDatabaseDSN
 
 	// Парсим флаги командной строки
 	flag.StringVar(&cfg.ServerAddress, "a", cfg.ServerAddress, "адрес запуска HTTP-сервера")
 	flag.StringVar(&cfg.BaseURL, "b", cfg.BaseURL, "базовый адрес результирующего сокращённого URL")
 	flag.StringVar(&cfg.FileStoragePath, "f", cfg.FileStoragePath, "путь до файла с данными")
+	flag.StringVar(&cfg.DatabaseDSN, "d", cfg.DatabaseDSN, "строка подключения к базе данных")
 	flag.Parse()
 
 	// Переопределяем переменными окружения (наивысший приоритет)
@@ -51,6 +55,10 @@ func NewConfig() (*Config, error) {
 
 	if envFileStoragePath := strings.TrimSpace(os.Getenv("FILE_STORAGE_PATH")); envFileStoragePath != "" {
 		cfg.FileStoragePath = envFileStoragePath
+	}
+
+	if envDatabaseDSN := strings.TrimSpace(os.Getenv("DATABASE_DSN")); envDatabaseDSN != "" {
+		cfg.DatabaseDSN = envDatabaseDSN
 	}
 
 	// Валидация конфигурации
