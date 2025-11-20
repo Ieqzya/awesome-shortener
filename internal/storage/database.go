@@ -3,10 +3,12 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
-	_ "github.com/lib/pq"
+	"github.com/jackc/pgerrcode"
+	"github.com/lib/pq"
 )
 
 // Database представляет подключение к базе данных
@@ -61,6 +63,7 @@ func (d *Database) runMigrations(ctx context.Context) error {
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		);
 		CREATE INDEX IF NOT EXISTS idx_short_id ON urls(short_id);
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_original_url ON urls(original_url);
 	`
 
 	_, err := d.db.ExecContext(ctx, query)
@@ -76,6 +79,16 @@ func (d *Database) SaveURL(ctx context.Context, shortID, originalURL string) err
 	query := `INSERT INTO urls (short_id, original_url) VALUES ($1, $2)`
 	_, err := d.db.ExecContext(ctx, query, shortID, originalURL)
 	if err != nil {
+		// Проверяем, является ли ошибка нарушением уникальности
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == pgerrcode.UniqueViolation {
+			// Получаем существующий short_id для этого URL
+			existingShortID, getErr := d.GetByOriginalURL(ctx, originalURL)
+			if getErr != nil {
+				return fmt.Errorf("ошибка получения существующего URL: %w", getErr)
+			}
+			return &ErrConflict{ShortID: existingShortID}
+		}
 		return fmt.Errorf("ошибка сохранения URL: %w", err)
 	}
 	return nil
@@ -93,6 +106,20 @@ func (d *Database) GetURL(ctx context.Context, shortID string) (string, error) {
 		return "", fmt.Errorf("ошибка получения URL: %w", err)
 	}
 	return originalURL, nil
+}
+
+// GetByOriginalURL получает короткий ID по оригинальному URL
+func (d *Database) GetByOriginalURL(ctx context.Context, originalURL string) (string, error) {
+	var shortID string
+	query := `SELECT short_id FROM urls WHERE original_url = $1`
+	err := d.db.QueryRowContext(ctx, query, originalURL).Scan(&shortID)
+	if err == sql.ErrNoRows {
+		return "", fmt.Errorf("URL не найден")
+	}
+	if err != nil {
+		return "", fmt.Errorf("ошибка получения short_id: %w", err)
+	}
+	return shortID, nil
 }
 
 // SaveBatch сохраняет множество URL в одной транзакции

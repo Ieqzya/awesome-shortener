@@ -23,6 +23,14 @@ func NewMemoryStorage() *MemoryStorage {
 func (m *MemoryStorage) SaveURL(ctx context.Context, shortID, originalURL string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	
+	// Проверяем, существует ли уже такой URL
+	for existingShortID, url := range m.urls {
+		if url == originalURL {
+			return &ErrConflict{ShortID: existingShortID}
+		}
+	}
+	
 	m.urls[shortID] = originalURL
 	return nil
 }
@@ -37,6 +45,19 @@ func (m *MemoryStorage) GetURL(ctx context.Context, shortID string) (string, err
 		return "", fmt.Errorf("URL не найден")
 	}
 	return url, nil
+}
+
+// GetByOriginalURL получает короткий ID по оригинальному URL
+func (m *MemoryStorage) GetByOriginalURL(ctx context.Context, originalURL string) (string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	
+	for shortID, url := range m.urls {
+		if url == originalURL {
+			return shortID, nil
+		}
+	}
+	return "", fmt.Errorf("URL не найден")
 }
 
 // SaveBatch сохраняет множество URL в памяти

@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -61,21 +62,29 @@ func generateID() string {
 }
 
 // shortenURL общая логика для сокращения URL
-func (app *App) shortenURL(ctx context.Context, originalURL string) (string, error) {
+func (app *App) shortenURL(ctx context.Context, originalURL string) (string, int, error) {
 	if originalURL == "" {
-		return "", fmt.Errorf("URL не может быть пустым")
+		return "", http.StatusBadRequest, fmt.Errorf("URL не может быть пустым")
 	}
 
 	id := generateID()
 	shortURL := fmt.Sprintf("%s/%s", app.config.BaseURL, id)
 	
 	// Сохраняем в хранилище
-	if err := app.storage.SaveURL(ctx, id, originalURL); err != nil {
+	err := app.storage.SaveURL(ctx, id, originalURL)
+	if err != nil {
+		// Проверяем, является ли ошибка конфликтом
+		var conflictErr *storage.ErrConflict
+		if errors.As(err, &conflictErr) {
+			// URL уже существует, возвращаем существующий short URL
+			existingShortURL := fmt.Sprintf("%s/%s", app.config.BaseURL, conflictErr.ShortID)
+			return existingShortURL, http.StatusConflict, nil
+		}
 		log.Printf("Ошибка сохранения в хранилище: %v", err)
-		return "", fmt.Errorf("ошибка сохранения")
+		return "", http.StatusInternalServerError, fmt.Errorf("ошибка сохранения")
 	}
 
-	return shortURL, nil
+	return shortURL, http.StatusCreated, nil
 }
 
 // CreateShortURL обрабатывает создание короткого URL (текстовый и JSON)
@@ -102,7 +111,7 @@ func (app *App) CreateShortURL(w http.ResponseWriter, r *http.Request) {
 		originalURL = strings.TrimSpace(string(body))
 	}
 	
-	shortURL, err := app.shortenURL(r.Context(), originalURL)
+	shortURL, statusCode, err := app.shortenURL(r.Context(), originalURL)
 	if err != nil {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
@@ -111,12 +120,12 @@ func (app *App) CreateShortURL(w http.ResponseWriter, r *http.Request) {
 	// Возвращаем ответ в том же формате, что и запрос
 	if strings.Contains(contentType, "application/json") {
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
+		w.WriteHeader(statusCode)
 		response := ShortenResponse{Result: shortURL}
 		json.NewEncoder(w).Encode(response)
 	} else {
 		w.Header().Set("Content-Type", "text/plain")
-		w.WriteHeader(http.StatusCreated)
+		w.WriteHeader(statusCode)
 		fmt.Fprint(w, shortURL)
 	}
 }
@@ -132,7 +141,7 @@ func (app *App) CreateShortURLJSON(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	originalURL := strings.TrimSpace(req.URL)
-	shortURL, err := app.shortenURL(r.Context(), originalURL)
+	shortURL, statusCode, err := app.shortenURL(r.Context(), originalURL)
 	if err != nil {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
@@ -140,7 +149,7 @@ func (app *App) CreateShortURLJSON(w http.ResponseWriter, r *http.Request) {
 
 	// Возвращаем JSON ответ
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
+	w.WriteHeader(statusCode)
 	
 	response := ShortenResponse{Result: shortURL}
 	if err := json.NewEncoder(w).Encode(response); err != nil {

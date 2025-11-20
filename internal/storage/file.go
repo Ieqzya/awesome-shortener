@@ -68,6 +68,13 @@ func (f *FileStorage) SaveURL(ctx context.Context, shortID, originalURL string) 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	// Проверяем, существует ли уже такой URL
+	for existingShortID, url := range f.urls {
+		if url == originalURL {
+			return &ErrConflict{ShortID: existingShortID}
+		}
+	}
+
 	// Сохраняем в памяти
 	f.urls[shortID] = originalURL
 
@@ -99,6 +106,19 @@ func (f *FileStorage) GetURL(ctx context.Context, shortID string) (string, error
 		return "", fmt.Errorf("URL не найден")
 	}
 	return url, nil
+}
+
+// GetByOriginalURL получает короткий ID по оригинальному URL
+func (f *FileStorage) GetByOriginalURL(ctx context.Context, originalURL string) (string, error) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	
+	for shortID, url := range f.urls {
+		if url == originalURL {
+			return shortID, nil
+		}
+	}
+	return "", fmt.Errorf("URL не найден")
 }
 
 // SaveBatch сохраняет множество URL в файл
