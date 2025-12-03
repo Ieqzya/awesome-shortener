@@ -61,11 +61,13 @@ func (d *Database) runMigrations(ctx context.Context) error {
 			short_id VARCHAR(255) UNIQUE NOT NULL,
 			original_url TEXT NOT NULL,
 			user_id VARCHAR(255),
+			is_deleted BOOLEAN DEFAULT FALSE,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		);
 		CREATE INDEX IF NOT EXISTS idx_short_id ON urls(short_id);
 		CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_original_url ON urls(original_url);
 		CREATE INDEX IF NOT EXISTS idx_user_id ON urls(user_id);
+		CREATE INDEX IF NOT EXISTS idx_is_deleted ON urls(is_deleted);
 	`
 
 	_, err := d.db.ExecContext(ctx, query)
@@ -104,13 +106,17 @@ func (d *Database) SaveURLWithUser(ctx context.Context, shortID, originalURL, us
 // GetURL получает оригинальный URL по короткому ID
 func (d *Database) GetURL(ctx context.Context, shortID string) (string, error) {
 	var originalURL string
-	query := `SELECT original_url FROM urls WHERE short_id = $1`
-	err := d.db.QueryRowContext(ctx, query, shortID).Scan(&originalURL)
+	var isDeleted bool
+	query := `SELECT original_url, is_deleted FROM urls WHERE short_id = $1`
+	err := d.db.QueryRowContext(ctx, query, shortID).Scan(&originalURL, &isDeleted)
 	if err == sql.ErrNoRows {
 		return "", fmt.Errorf("URL не найден")
 	}
 	if err != nil {
 		return "", fmt.Errorf("ошибка получения URL: %w", err)
+	}
+	if isDeleted {
+		return "", &ErrDeleted{}
 	}
 	return originalURL, nil
 }
@@ -219,4 +225,34 @@ func (d *Database) DB() *sql.DB {
 		return nil
 	}
 	return d.db
+}
+
+// DeleteURLs помечает URL как удаленные (batch update)
+func (d *Database) DeleteURLs(ctx context.Context, shortIDs []string, userID string) error {
+	if len(shortIDs) == 0 {
+		return nil
+	}
+
+	// Используем batch update для эффективности
+	query := `UPDATE urls SET is_deleted = TRUE WHERE short_id = ANY($1) AND user_id = $2`
+	_, err := d.db.ExecContext(ctx, query, pq.Array(shortIDs), userID)
+	if err != nil {
+		return fmt.Errorf("ошибка удаления URL: %w", err)
+	}
+
+	return nil
+}
+
+// IsDeleted проверяет, удален ли URL
+func (d *Database) IsDeleted(ctx context.Context, shortID string) (bool, error) {
+	var isDeleted bool
+	query := `SELECT is_deleted FROM urls WHERE short_id = $1`
+	err := d.db.QueryRowContext(ctx, query, shortID).Scan(&isDeleted)
+	if err == sql.ErrNoRows {
+		return false, fmt.Errorf("URL не найден")
+	}
+	if err != nil {
+		return false, fmt.Errorf("ошибка проверки статуса URL: %w", err)
+	}
+	return isDeleted, nil
 }

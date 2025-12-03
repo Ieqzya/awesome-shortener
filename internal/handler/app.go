@@ -231,6 +231,11 @@ func (app *App) RedirectToOriginal(w http.ResponseWriter, r *http.Request) {
 	
 	originalURL, err := app.storage.GetURL(r.Context(), id)
 	if err != nil {
+		// Проверяем, является ли ошибка удаленным URL
+		if storage.IsDeletedError(err) {
+			http.Error(w, "Gone", http.StatusGone)
+			return
+		}
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}
@@ -270,4 +275,33 @@ func (app *App) GetUserURLs(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(records); err != nil {
 		log.Printf("Ошибка кодирования JSON: %v", err)
 	}
+}
+
+// DeleteUserURLs асинхронно удаляет URL пользователя
+func (app *App) DeleteUserURLs(w http.ResponseWriter, r *http.Request) {
+	// Получаем ID пользователя
+	userID := auth.GetOrCreateUserID(w, r)
+
+	// Декодируем список ID для удаления
+	var shortIDs []string
+	if err := json.NewDecoder(r.Body).Decode(&shortIDs); err != nil {
+		http.Error(w, "Bad Request", http.StatusBadRequest)
+		return
+	}
+
+	if len(shortIDs) == 0 {
+		http.Error(w, "Bad Request", http.StatusBadRequest)
+		return
+	}
+
+	// Запускаем асинхронное удаление
+	go func() {
+		ctx := context.Background()
+		if err := app.storage.DeleteURLs(ctx, shortIDs, userID); err != nil {
+			log.Printf("Ошибка удаления URL: %v", err)
+		}
+	}()
+
+	// Возвращаем 202 Accepted
+	w.WriteHeader(http.StatusAccepted)
 }

@@ -20,6 +20,19 @@ func IsConflictError(err error) bool {
 	return errors.As(err, &conflictErr)
 }
 
+// ErrDeleted ошибка при попытке получить удаленный URL
+type ErrDeleted struct{}
+
+func (e *ErrDeleted) Error() string {
+	return "URL has been deleted"
+}
+
+// IsDeletedError проверяет, является ли ошибка удаленным URL
+func IsDeletedError(err error) bool {
+	var deletedErr *ErrDeleted
+	return errors.As(err, &deletedErr)
+}
+
 // BatchItem представляет элемент для batch операции
 type BatchItem struct {
 	CorrelationID string
@@ -42,5 +55,7 @@ type Storage interface {
 	GetUserURLs(ctx context.Context, userID string) ([]UserURLRecord, error)
 	SaveBatch(ctx context.Context, items []BatchItem) error
 	SaveBatchWithUser(ctx context.Context, items []BatchItem, userID string) error
+	DeleteURLs(ctx context.Context, shortIDs []string, userID string) error
+	IsDeleted(ctx context.Context, shortID string) (bool, error)
 	Close() error
 }

@@ -10,6 +10,7 @@ import (
 type MemoryURLRecord struct {
 	OriginalURL string
 	UserID      string
+	IsDeleted   bool
 }
 
 // MemoryStorage хранилище URL в памяти
@@ -57,6 +58,9 @@ func (m *MemoryStorage) GetURL(ctx context.Context, shortID string) (string, err
 	record, exists := m.urls[shortID]
 	if !exists {
 		return "", fmt.Errorf("URL не найден")
+	}
+	if record.IsDeleted {
+		return "", &ErrDeleted{}
 	}
 	return record.OriginalURL, nil
 }
@@ -114,4 +118,30 @@ func (m *MemoryStorage) SaveBatchWithUser(ctx context.Context, items []BatchItem
 // Close закрывает хранилище (для памяти ничего не делает)
 func (m *MemoryStorage) Close() error {
 	return nil
+}
+
+// DeleteURLs помечает URL как удаленные
+func (m *MemoryStorage) DeleteURLs(ctx context.Context, shortIDs []string, userID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	
+	for _, shortID := range shortIDs {
+		if record, exists := m.urls[shortID]; exists && record.UserID == userID {
+			record.IsDeleted = true
+			m.urls[shortID] = record
+		}
+	}
+	return nil
+}
+
+// IsDeleted проверяет, удален ли URL
+func (m *MemoryStorage) IsDeleted(ctx context.Context, shortID string) (bool, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	
+	record, exists := m.urls[shortID]
+	if !exists {
+		return false, fmt.Errorf("URL не найден")
+	}
+	return record.IsDeleted, nil
 }

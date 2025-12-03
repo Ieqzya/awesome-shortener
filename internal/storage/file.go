@@ -171,3 +171,13 @@ func (f *FileStorage) Close() error {
 	}
 	return nil
 }
+
+// DeleteURLs помечает URL как удаленные (не поддерживается для файлового хранилища)
+func (f *FileStorage) DeleteURLs(ctx context.Context, shortIDs []string, userID string) error {
+	return nil
+}
+
+// IsDeleted проверяет, удален ли URL (не поддерживается для файлового хранилища)
+func (f *FileStorage) IsDeleted(ctx context.Context, shortID string) (bool, error) {
+	return false, nil
+}

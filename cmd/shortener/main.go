@@ -80,6 +80,7 @@ func main() {
 	r.Post("/api/shorten/batch", app.CreateShortURLBatch)
 	r.Get("/{id}", app.RedirectToOriginal)
 	r.Get("/api/user/urls", app.GetUserURLs)
+	r.Delete("/api/user/urls", app.DeleteUserURLs)
 	
 	// Добавляем хендлер для проверки соединения с БД
 	r.Get("/ping", handler.PingDatabase(db))
