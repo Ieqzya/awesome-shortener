@@ -27,8 +27,8 @@ type BatchItem struct {
 	OriginalURL   string
 }
 
-// URLRecord представляет запись URL с метаданными
-type URLRecord struct {
+// UserURLRecord представляет запись URL пользователя
+type UserURLRecord struct {
 	ShortURL    string `json:"short_url"`
 	OriginalURL string `json:"original_url"`
 }
@@ -39,7 +39,7 @@ type Storage interface {
 	SaveURLWithUser(ctx context.Context, shortID, originalURL, userID string) error
 	GetURL(ctx context.Context, shortID string) (string, error)
 	GetByOriginalURL(ctx context.Context, originalURL string) (string, error)
-	GetUserURLs(ctx context.Context, userID string) ([]URLRecord, error)
+	GetUserURLs(ctx context.Context, userID string) ([]UserURLRecord, error)
 	SaveBatch(ctx context.Context, items []BatchItem) error
 	SaveBatchWithUser(ctx context.Context, items []BatchItem, userID string) error
 	Close() error

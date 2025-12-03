@@ -17,8 +17,8 @@ type FileStorage struct {
 	mu       sync.RWMutex
 }
 
-// URLRecord запись URL в файле
-type URLRecord struct {
+// FileURLRecord запись URL в файле
+type FileURLRecord struct {
 	ShortID     string `json:"short_id"`
 	OriginalURL string `json:"original_url"`
 }
@@ -54,7 +54,7 @@ func NewFileStorage(filePath string) (*FileStorage, error) {
 func (f *FileStorage) loadFromFile() error {
 	scanner := bufio.NewScanner(f.file)
 	for scanner.Scan() {
-		var record URLRecord
+		var record FileURLRecord
 		if err := json.Unmarshal(scanner.Bytes(), &record); err != nil {
 			continue // Пропускаем некорректные записи
 		}
@@ -79,7 +79,7 @@ func (f *FileStorage) SaveURL(ctx context.Context, shortID, originalURL string) 
 	f.urls[shortID] = originalURL
 
 	// Записываем в файл
-	record := URLRecord{
+	record := FileURLRecord{
 		ShortID:     shortID,
 		OriginalURL: originalURL,
 	}
@@ -127,8 +127,8 @@ func (f *FileStorage) SaveURLWithUser(ctx context.Context, shortID, originalURL,
 }
 
 // GetUserURLs получает все URL пользователя (не поддерживается для файлового хранилища)
-func (f *FileStorage) GetUserURLs(ctx context.Context, userID string) ([]URLRecord, error) {
-	return []URLRecord{}, nil
+func (f *FileStorage) GetUserURLs(ctx context.Context, userID string) ([]UserURLRecord, error) {
+	return []UserURLRecord{}, nil
 }
 
 // SaveBatch сохраняет множество URL в файл без user_id
@@ -146,7 +146,7 @@ func (f *FileStorage) SaveBatchWithUser(ctx context.Context, items []BatchItem, 
 		f.urls[item.ShortID] = item.OriginalURL
 
 		// Записываем в файл
-		record := URLRecord{
+		record := FileURLRecord{
 			ShortID:     item.ShortID,
 			OriginalURL: item.OriginalURL,
 		}

@@ -130,7 +130,7 @@ func (d *Database) GetByOriginalURL(ctx context.Context, originalURL string) (st
 }
 
 // GetUserURLs получает все URL пользователя
-func (d *Database) GetUserURLs(ctx context.Context, userID string) ([]URLRecord, error) {
+func (d *Database) GetUserURLs(ctx context.Context, userID string) ([]UserURLRecord, error) {
 	query := `SELECT short_id, original_url FROM urls WHERE user_id = $1`
 	rows, err := d.db.QueryContext(ctx, query, userID)
 	if err != nil {
@@ -138,13 +138,13 @@ func (d *Database) GetUserURLs(ctx context.Context, userID string) ([]URLRecord,
 	}
 	defer rows.Close()
 
-	var records []URLRecord
+	var records []UserURLRecord
 	for rows.Next() {
 		var shortID, originalURL string
 		if err := rows.Scan(&shortID, &originalURL); err != nil {
 			return nil, fmt.Errorf("ошибка сканирования строки: %w", err)
 		}
-		records = append(records, URLRecord{
+		records = append(records, UserURLRecord{
 			ShortURL:    shortID, // Будет преобразовано в полный URL в хендлере
 			OriginalURL: originalURL,
 		})

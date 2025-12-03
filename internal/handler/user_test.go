@@ -116,7 +116,7 @@ func TestGetUserURLs_Success(t *testing.T) {
 	}
 
 	// Проверяем формат ответа
-	var records []storage.URLRecord
+	var records []storage.UserURLRecord
 	if err := json.NewDecoder(w.Body).Decode(&records); err != nil {
 		t.Fatalf("Ошибка декодирования JSON: %v", err)
 	}
@@ -164,7 +164,7 @@ func TestUserIsolation(t *testing.T) {
 	wGet1 := httptest.NewRecorder()
 	app.GetUserURLs(wGet1, reqGet1)
 
-	var records1 []storage.URLRecord
+	var records1 []storage.UserURLRecord
 	json.NewDecoder(wGet1.Body).Decode(&records1)
 
 	// Пользователь 2 запрашивает свои URL
@@ -173,7 +173,7 @@ func TestUserIsolation(t *testing.T) {
 	wGet2 := httptest.NewRecorder()
 	app.GetUserURLs(wGet2, reqGet2)
 
-	var records2 []storage.URLRecord
+	var records2 []storage.UserURLRecord
 	json.NewDecoder(wGet2.Body).Decode(&records2)
 
 	// Проверяем изоляцию

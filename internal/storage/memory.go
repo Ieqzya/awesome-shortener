@@ -75,14 +75,14 @@ func (m *MemoryStorage) GetByOriginalURL(ctx context.Context, originalURL string
 }
 
 // GetUserURLs получает все URL пользователя
-func (m *MemoryStorage) GetUserURLs(ctx context.Context, userID string) ([]URLRecord, error) {
+func (m *MemoryStorage) GetUserURLs(ctx context.Context, userID string) ([]UserURLRecord, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	
-	var records []URLRecord
+	var records []UserURLRecord
 	for shortID, record := range m.urls {
 		if record.UserID == userID {
-			records = append(records, URLRecord{
+			records = append(records, UserURLRecord{
 				ShortURL:    shortID,
 				OriginalURL: record.OriginalURL,
 			})
