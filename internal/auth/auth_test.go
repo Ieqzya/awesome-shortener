@@ -67,6 +67,7 @@ func TestSetAndGetUserID(t *testing.T) {
 	
 	// Получаем куку из ответа
 	result := w.Result()
+	defer result.Body.Close()
 	cookies := result.Cookies()
 	
 	if len(cookies) == 0 {
@@ -124,7 +125,9 @@ func TestGetOrCreateUserID_NewUser(t *testing.T) {
 	}
 	
 	// Проверяем, что кука была установлена
-	cookies := w.Result().Cookies()
+	result := w.Result()
+	defer result.Body.Close()
+	cookies := result.Cookies()
 	if len(cookies) == 0 {
 		t.Error("Кука должна быть установлена для нового пользователя")
 	}
@@ -135,7 +138,9 @@ func TestGetOrCreateUserID_ExistingUser(t *testing.T) {
 	userID := "existing-user-123"
 	w1 := httptest.NewRecorder()
 	SetUserID(w1, userID)
-	cookie := w1.Result().Cookies()[0]
+	result := w1.Result()
+	defer result.Body.Close()
+	cookie := result.Cookies()[0]
 	
 	// Создаем запрос с существующей кукой
 	req := httptest.NewRequest("GET", "/", nil)

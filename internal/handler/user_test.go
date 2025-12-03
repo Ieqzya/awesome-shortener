@@ -44,7 +44,9 @@ func TestGetUserURLs_NoURLs(t *testing.T) {
 	app.CreateShortURL(w1, req1)
 
 	// Получаем куку из ответа
-	cookies := w1.Result().Cookies()
+	result := w1.Result()
+	defer result.Body.Close()
+	cookies := result.Cookies()
 	if len(cookies) == 0 {
 		t.Fatal("Кука не была установлена")
 	}
@@ -87,7 +89,9 @@ func TestGetUserURLs_Success(t *testing.T) {
 		
 		// Если есть кука, добавляем её
 		if cookie != nil {
-			cookies := cookie.Result().Cookies()
+			result := cookie.Result()
+			cookies := result.Cookies()
+			result.Body.Close()
 			if len(cookies) > 0 {
 				req.AddCookie(cookies[0])
 			}
@@ -99,7 +103,9 @@ func TestGetUserURLs_Success(t *testing.T) {
 	}
 
 	// Получаем куку
-	cookies := cookie.Result().Cookies()
+	result := cookie.Result()
+	defer result.Body.Close()
+	cookies := result.Cookies()
 	if len(cookies) == 0 {
 		t.Fatal("Кука не была установлена")
 	}
@@ -149,14 +155,18 @@ func TestUserIsolation(t *testing.T) {
 	req1 := httptest.NewRequest("POST", "/", body1)
 	w1 := httptest.NewRecorder()
 	app.CreateShortURL(w1, req1)
-	cookie1 := w1.Result().Cookies()[0]
+	result1 := w1.Result()
+	defer result1.Body.Close()
+	cookie1 := result1.Cookies()[0]
 
 	// Пользователь 2 создает URL
 	body2 := strings.NewReader("https://user2.com")
 	req2 := httptest.NewRequest("POST", "/", body2)
 	w2 := httptest.NewRecorder()
 	app.CreateShortURL(w2, req2)
-	cookie2 := w2.Result().Cookies()[0]
+	result2 := w2.Result()
+	defer result2.Body.Close()
+	cookie2 := result2.Cookies()[0]
 
 	// Пользователь 1 запрашивает свои URL
 	reqGet1 := httptest.NewRequest("GET", "/api/user/urls", nil)
