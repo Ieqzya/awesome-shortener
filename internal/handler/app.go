@@ -238,8 +238,8 @@ func (app *App) RedirectToOriginal(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Location", originalURL)
 	w.WriteHeader(http.StatusTemporaryRedirect)
 }
-/
-/ GetUserURLs возвращает все URL пользователя
+
+// GetUserURLs возвращает все URL пользователя
 func (app *App) GetUserURLs(w http.ResponseWriter, r *http.Request) {
 	// Получаем ID пользователя из куки
 	userID, err := auth.GetUserID(r)
