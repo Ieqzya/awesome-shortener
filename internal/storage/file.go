@@ -121,8 +121,23 @@ func (f *FileStorage) GetByOriginalURL(ctx context.Context, originalURL string) 
 	return "", fmt.Errorf("URL не найден")
 }
 
-// SaveBatch сохраняет множество URL в файл
+// SaveURLWithUser сохраняет URL в файл с user_id (для совместимости)
+func (f *FileStorage) SaveURLWithUser(ctx context.Context, shortID, originalURL, userID string) error {
+	return f.SaveURL(ctx, shortID, originalURL)
+}
+
+// GetUserURLs получает все URL пользователя (не поддерживается для файлового хранилища)
+func (f *FileStorage) GetUserURLs(ctx context.Context, userID string) ([]URLRecord, error) {
+	return []URLRecord{}, nil
+}
+
+// SaveBatch сохраняет множество URL в файл без user_id
 func (f *FileStorage) SaveBatch(ctx context.Context, items []BatchItem) error {
+	return f.SaveBatchWithUser(ctx, items, "")
+}
+
+// SaveBatchWithUser сохраняет множество URL в файл с user_id
+func (f *FileStorage) SaveBatchWithUser(ctx context.Context, items []BatchItem, userID string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 

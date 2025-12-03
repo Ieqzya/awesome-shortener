@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strings"
 
+	"awesome-shortener/internal/auth"
 	"awesome-shortener/internal/config"
 	"awesome-shortener/internal/storage"
 	"github.com/go-chi/chi/v5"
@@ -62,16 +63,19 @@ func generateID() string {
 }
 
 // shortenURL общая логика для сокращения URL
-func (app *App) shortenURL(ctx context.Context, originalURL string) (string, int, error) {
+func (app *App) shortenURL(ctx context.Context, w http.ResponseWriter, r *http.Request, originalURL string) (string, int, error) {
 	if originalURL == "" {
 		return "", http.StatusBadRequest, fmt.Errorf("URL не может быть пустым")
 	}
 
+	// Получаем или создаем ID пользователя
+	userID := auth.GetOrCreateUserID(w, r)
+
 	id := generateID()
 	shortURL := fmt.Sprintf("%s/%s", app.config.BaseURL, id)
 	
-	// Сохраняем в хранилище
-	err := app.storage.SaveURL(ctx, id, originalURL)
+	// Сохраняем в хранилище с user_id
+	err := app.storage.SaveURLWithUser(ctx, id, originalURL, userID)
 	if err != nil {
 		// Проверяем, является ли ошибка конфликтом
 		var conflictErr *storage.ErrConflict
@@ -111,7 +115,7 @@ func (app *App) CreateShortURL(w http.ResponseWriter, r *http.Request) {
 		originalURL = strings.TrimSpace(string(body))
 	}
 	
-	shortURL, statusCode, err := app.shortenURL(r.Context(), originalURL)
+	shortURL, statusCode, err := app.shortenURL(r.Context(), w, r, originalURL)
 	if err != nil {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
@@ -141,7 +145,7 @@ func (app *App) CreateShortURLJSON(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	originalURL := strings.TrimSpace(req.URL)
-	shortURL, statusCode, err := app.shortenURL(r.Context(), originalURL)
+	shortURL, statusCode, err := app.shortenURL(r.Context(), w, r, originalURL)
 	if err != nil {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
@@ -201,8 +205,11 @@ func (app *App) CreateShortURLBatch(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	
-	// Сохраняем все URL в хранилище
-	if err := app.storage.SaveBatch(r.Context(), batchItems); err != nil {
+	// Получаем или создаем ID пользователя
+	userID := auth.GetOrCreateUserID(w, r)
+
+	// Сохраняем все URL в хранилище с user_id
+	if err := app.storage.SaveBatchWithUser(r.Context(), batchItems, userID); err != nil {
 		log.Printf("Ошибка сохранения batch в хранилище: %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
@@ -230,4 +237,42 @@ func (app *App) RedirectToOriginal(w http.ResponseWriter, r *http.Request) {
 	
 	w.Header().Set("Location", originalURL)
 	w.WriteHeader(http.StatusTemporaryRedirect)
+}
+/
+/ GetUserURLs возвращает все URL пользователя
+func (app *App) GetUserURLs(w http.ResponseWriter, r *http.Request) {
+	// Получаем ID пользователя из куки
+	userID, err := auth.GetUserID(r)
+	if err != nil {
+		// Кука отсутствует или невалидна
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Получаем URL пользователя из хранилища
+	records, err := app.storage.GetUserURLs(r.Context(), userID)
+	if err != nil {
+		log.Printf("Ошибка получения URL пользователя: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	// Если у пользователя нет URL
+	if len(records) == 0 {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	// Преобразуем short_id в полные URL
+	for i := range records {
+		records[i].ShortURL = fmt.Sprintf("%s/%s", app.config.BaseURL, records[i].ShortURL)
+	}
+
+	// Возвращаем JSON ответ
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	
+	if err := json.NewEncoder(w).Encode(records); err != nil {
+		log.Printf("Ошибка кодирования JSON: %v", err)
+	}
 }

@@ -60,10 +60,12 @@ func (d *Database) runMigrations(ctx context.Context) error {
 			id SERIAL PRIMARY KEY,
 			short_id VARCHAR(255) UNIQUE NOT NULL,
 			original_url TEXT NOT NULL,
+			user_id VARCHAR(255),
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		);
 		CREATE INDEX IF NOT EXISTS idx_short_id ON urls(short_id);
 		CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_original_url ON urls(original_url);
+		CREATE INDEX IF NOT EXISTS idx_user_id ON urls(user_id);
 	`
 
 	_, err := d.db.ExecContext(ctx, query)
@@ -74,10 +76,15 @@ func (d *Database) runMigrations(ctx context.Context) error {
 	return nil
 }
 
-// SaveURL сохраняет URL в базу данных
+// SaveURL сохраняет URL в базу данных без user_id
 func (d *Database) SaveURL(ctx context.Context, shortID, originalURL string) error {
-	query := `INSERT INTO urls (short_id, original_url) VALUES ($1, $2)`
-	_, err := d.db.ExecContext(ctx, query, shortID, originalURL)
+	return d.SaveURLWithUser(ctx, shortID, originalURL, "")
+}
+
+// SaveURLWithUser сохраняет URL в базу данных с user_id
+func (d *Database) SaveURLWithUser(ctx context.Context, shortID, originalURL, userID string) error {
+	query := `INSERT INTO urls (short_id, original_url, user_id) VALUES ($1, $2, $3)`
+	_, err := d.db.ExecContext(ctx, query, shortID, originalURL, userID)
 	if err != nil {
 		// Проверяем, является ли ошибка нарушением уникальности
 		var pqErr *pq.Error
@@ -122,8 +129,41 @@ func (d *Database) GetByOriginalURL(ctx context.Context, originalURL string) (st
 	return shortID, nil
 }
 
-// SaveBatch сохраняет множество URL в одной транзакции
+// GetUserURLs получает все URL пользователя
+func (d *Database) GetUserURLs(ctx context.Context, userID string) ([]URLRecord, error) {
+	query := `SELECT short_id, original_url FROM urls WHERE user_id = $1`
+	rows, err := d.db.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("ошибка получения URL пользователя: %w", err)
+	}
+	defer rows.Close()
+
+	var records []URLRecord
+	for rows.Next() {
+		var shortID, originalURL string
+		if err := rows.Scan(&shortID, &originalURL); err != nil {
+			return nil, fmt.Errorf("ошибка сканирования строки: %w", err)
+		}
+		records = append(records, URLRecord{
+			ShortURL:    shortID, // Будет преобразовано в полный URL в хендлере
+			OriginalURL: originalURL,
+		})
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("ошибка итерации по строкам: %w", err)
+	}
+
+	return records, nil
+}
+
+// SaveBatch сохраняет множество URL в одной транзакции без user_id
 func (d *Database) SaveBatch(ctx context.Context, items []BatchItem) error {
+	return d.SaveBatchWithUser(ctx, items, "")
+}
+
+// SaveBatchWithUser сохраняет множество URL в одной транзакции с user_id
+func (d *Database) SaveBatchWithUser(ctx context.Context, items []BatchItem, userID string) error {
 	if len(items) == 0 {
 		return nil
 	}
@@ -136,7 +176,7 @@ func (d *Database) SaveBatch(ctx context.Context, items []BatchItem) error {
 	defer tx.Rollback()
 
 	// Подготавливаем запрос
-	stmt, err := tx.PrepareContext(ctx, `INSERT INTO urls (short_id, original_url) VALUES ($1, $2)`)
+	stmt, err := tx.PrepareContext(ctx, `INSERT INTO urls (short_id, original_url, user_id) VALUES ($1, $2, $3)`)
 	if err != nil {
 		return fmt.Errorf("ошибка подготовки запроса: %w", err)
 	}
@@ -144,7 +184,7 @@ func (d *Database) SaveBatch(ctx context.Context, items []BatchItem) error {
 
 	// Выполняем вставку для каждого элемента
 	for _, item := range items {
-		if _, err := stmt.ExecContext(ctx, item.ShortID, item.OriginalURL); err != nil {
+		if _, err := stmt.ExecContext(ctx, item.ShortID, item.OriginalURL, userID); err != nil {
 			return fmt.Errorf("ошибка сохранения URL: %w", err)
 		}
 	}
