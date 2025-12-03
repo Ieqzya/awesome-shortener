@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -82,37 +83,34 @@ func TestGetUserURLs_Success(t *testing.T) {
 		"https://example3.com",
 	}
 
-	var cookie *httptest.ResponseRecorder
-	for _, url := range urls {
+	var savedCookie *http.Cookie
+	for i, url := range urls {
 		body := strings.NewReader(url)
 		req := httptest.NewRequest("POST", "/", body)
 		
 		// Если есть кука, добавляем её
-		if cookie != nil {
-			result := cookie.Result()
-			cookies := result.Cookies()
-			result.Body.Close()
-			if len(cookies) > 0 {
-				req.AddCookie(cookies[0])
-			}
+		if savedCookie != nil {
+			req.AddCookie(savedCookie)
 		}
 		
 		w := httptest.NewRecorder()
 		app.CreateShortURL(w, req)
-		cookie = w
-	}
-
-	// Получаем куку
-	result := cookie.Result()
-	defer result.Body.Close()
-	cookies := result.Cookies()
-	if len(cookies) == 0 {
-		t.Fatal("Кука не была установлена")
+		
+		// Сохраняем куку из первого запроса
+		if i == 0 {
+			result := w.Result()
+			cookies := result.Cookies()
+			result.Body.Close()
+			if len(cookies) == 0 {
+				t.Fatal("Кука не была установлена")
+			}
+			savedCookie = cookies[0]
+		}
 	}
 
 	// Запрашиваем URL пользователя
 	req := httptest.NewRequest("GET", "/api/user/urls", nil)
-	req.AddCookie(cookies[0])
+	req.AddCookie(savedCookie)
 	w := httptest.NewRecorder()
 
 	app.GetUserURLs(w, req)
