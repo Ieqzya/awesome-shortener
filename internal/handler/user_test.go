@@ -19,14 +19,22 @@ func TestGetUserURLs_NoAuth(t *testing.T) {
 	store := storage.NewMemoryStorage()
 	app := NewApp(cfg, store)
 
-	// Запрос без куки
+	// Запрос без куки - должен создать нового пользователя и вернуть 204 (нет URL)
 	req := httptest.NewRequest("GET", "/api/user/urls", nil)
 	w := httptest.NewRecorder()
 
 	app.GetUserURLs(w, req)
 
-	if w.Code != 401 {
-		t.Errorf("Ожидали код 401, получили %d", w.Code)
+	if w.Code != 204 {
+		t.Errorf("Ожидали код 204, получили %d", w.Code)
+	}
+	
+	// Проверяем, что кука была установлена
+	result := w.Result()
+	defer result.Body.Close()
+	cookies := result.Cookies()
+	if len(cookies) == 0 {
+		t.Error("Кука должна быть установлена для нового пользователя")
 	}
 }
 
