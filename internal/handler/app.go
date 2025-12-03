@@ -241,13 +241,8 @@ func (app *App) RedirectToOriginal(w http.ResponseWriter, r *http.Request) {
 
 // GetUserURLs возвращает все URL пользователя
 func (app *App) GetUserURLs(w http.ResponseWriter, r *http.Request) {
-	// Получаем ID пользователя из куки
-	userID, err := auth.GetUserID(r)
-	if err != nil {
-		// Кука отсутствует или невалидна
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
+	// Получаем или создаем ID пользователя
+	userID := auth.GetOrCreateUserID(w, r)
 
 	// Получаем URL пользователя из хранилища
 	records, err := app.storage.GetUserURLs(r.Context(), userID)
