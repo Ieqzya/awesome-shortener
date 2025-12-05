@@ -2,32 +2,43 @@ package handler
 
 import (
 	"context"
+	cryptoRand "crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
+	mathRand "math/rand"
 	"net/http"
 	"strings"
 
 	"awesome-shortener/internal/auth"
 	"awesome-shortener/internal/config"
+	"awesome-shortener/internal/service"
 	"awesome-shortener/internal/storage"
 	"github.com/go-chi/chi/v5"
 )
 
 // App представляет приложение с зависимостями
 type App struct {
-	config  *config.Config
-	storage storage.Storage
+	config     *config.Config
+	urlService *service.URLService
+	storage    storage.Storage // Оставляем для обратной совместимости с тестами
 }
 
 // NewApp создает новое приложение
 func NewApp(cfg *config.Config, store storage.Storage) *App {
 	return &App{
-		config:  cfg,
-		storage: store,
+		config:     cfg,
+		urlService: service.NewURLService(store, cfg),
+		storage:    store,
+	}
+}
+
+// Shutdown gracefully останавливает приложение
+func (app *App) Shutdown() {
+	if app.urlService != nil {
+		app.urlService.Shutdown()
 	}
 }
 
@@ -53,42 +64,18 @@ type BatchShortenResponse struct {
 	ShortURL      string `json:"short_url"`
 }
 
-func generateID() string {
-	const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	result := make([]byte, 8)
-	for i := range result {
-		result[i] = chars[rand.Intn(len(chars))]
-	}
-	return string(result)
-}
-
 // shortenURL общая логика для сокращения URL
 func (app *App) shortenURL(ctx context.Context, w http.ResponseWriter, r *http.Request, originalURL string) (string, int, error) {
-	if originalURL == "" {
-		return "", http.StatusBadRequest, fmt.Errorf("URL не может быть пустым")
-	}
-
 	// Получаем или создаем ID пользователя
 	userID := auth.GetOrCreateUserID(w, r)
 
-	id := generateID()
-	shortURL := fmt.Sprintf("%s/%s", app.config.BaseURL, id)
-	
-	// Сохраняем в хранилище с user_id
-	err := app.storage.SaveURLWithUser(ctx, id, originalURL, userID)
-	if err != nil {
-		// Проверяем, является ли ошибка конфликтом
-		var conflictErr *storage.ErrConflict
-		if errors.As(err, &conflictErr) {
-			// URL уже существует, возвращаем существующий short URL
-			existingShortURL := fmt.Sprintf("%s/%s", app.config.BaseURL, conflictErr.ShortID)
-			return existingShortURL, http.StatusConflict, nil
-		}
-		log.Printf("Ошибка сохранения в хранилище: %v", err)
-		return "", http.StatusInternalServerError, fmt.Errorf("ошибка сохранения")
+	// Используем service для бизнес-логики
+	shortURL, statusCode, err := app.urlService.ShortenURL(ctx, originalURL, userID)
+	if err != nil && statusCode >= 500 {
+		log.Printf("Ошибка сокращения URL: %v", err)
 	}
-
-	return shortURL, http.StatusCreated, nil
+	
+	return shortURL, statusCode, err
 }
 
 // CreateShortURL обрабатывает создание короткого URL (текстовый и JSON)
@@ -229,7 +216,8 @@ func (app *App) CreateShortURLBatch(w http.ResponseWriter, r *http.Request) {
 func (app *App) RedirectToOriginal(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	
-	originalURL, err := app.storage.GetURL(r.Context(), id)
+	// Используем service для получения URL
+	originalURL, err := app.urlService.GetOriginalURL(r.Context(), id)
 	if err != nil {
 		// Проверяем, является ли ошибка удаленным URL
 		if storage.IsDeletedError(err) {
@@ -249,8 +237,8 @@ func (app *App) GetUserURLs(w http.ResponseWriter, r *http.Request) {
 	// Получаем или создаем ID пользователя
 	userID := auth.GetOrCreateUserID(w, r)
 
-	// Получаем URL пользователя из хранилища
-	records, err := app.storage.GetUserURLs(r.Context(), userID)
+	// Используем service для получения URL
+	records, err := app.urlService.GetUserURLs(r.Context(), userID)
 	if err != nil {
 		log.Printf("Ошибка получения URL пользователя: %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -261,11 +249,6 @@ func (app *App) GetUserURLs(w http.ResponseWriter, r *http.Request) {
 	if len(records) == 0 {
 		w.WriteHeader(http.StatusNoContent)
 		return
-	}
-
-	// Преобразуем short_id в полные URL
-	for i := range records {
-		records[i].ShortURL = fmt.Sprintf("%s/%s", app.config.BaseURL, records[i].ShortURL)
 	}
 
 	// Возвращаем JSON ответ
@@ -294,13 +277,8 @@ func (app *App) DeleteUserURLs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Запускаем асинхронное удаление
-	go func() {
-		ctx := context.Background()
-		if err := app.storage.DeleteURLs(ctx, shortIDs, userID); err != nil {
-			log.Printf("Ошибка удаления URL: %v", err)
-		}
-	}()
+	// Используем service для асинхронного удаления с graceful shutdown
+	app.urlService.DeleteURLsAsync(shortIDs, userID)
 
 	// Возвращаем 202 Accepted
 	w.WriteHeader(http.StatusAccepted)

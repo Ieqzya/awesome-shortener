@@ -5,16 +5,29 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/google/uuid"
 )
 
 const (
-	cookieName = "user_id"
-	secretKey  = "super-secret-key-change-in-production" // В продакшене должен быть из переменной окружения
+	cookieName       = "user_id"
+	defaultSecretKey = "default-secret-key-please-change"
 )
+
+var secretKey string
+
+func init() {
+	// Получаем секретный ключ из переменной окружения
+	secretKey = os.Getenv("SECRET_KEY")
+	if secretKey == "" {
+		secretKey = defaultSecretKey
+		log.Println("WARNING: Using default secret key. Set SECRET_KEY environment variable for production!")
+	}
+}
 
 // GenerateUserID генерирует новый уникальный ID пользователя
 func GenerateUserID() string {

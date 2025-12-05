@@ -1,9 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"awesome-shortener/internal/config"
 	"awesome-shortener/internal/handler"
@@ -91,7 +96,36 @@ func main() {
 		fmt.Println("База данных: подключена")
 	}
 	
-	if err := http.ListenAndServe(cfg.ServerAddress, r); err != nil {
-		log.Fatalf("Ошибка запуска сервера: %v", err)
+	// Graceful shutdown
+	server := &http.Server{
+		Addr:    cfg.ServerAddress,
+		Handler: r,
 	}
+	
+	// Запускаем сервер в отдельной горутине
+	go func() {
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Ошибка запуска сервера: %v", err)
+		}
+	}()
+	
+	// Ожидаем сигнал завершения
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	<-quit
+	
+	fmt.Println("Завершение работы сервера...")
+	
+	// Останавливаем приложение
+	app.Shutdown()
+	
+	// Останавливаем HTTP сервер
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	
+	if err := server.Shutdown(ctx); err != nil {
+		log.Printf("Ошибка при завершении сервера: %v", err)
+	}
+	
+	fmt.Println("Сервер остановлен")
 }
