@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	cryptoRand "crypto/rand"
+	"errors"
 	"fmt"
 	mathRand "math/rand"
 	"sync"
@@ -81,7 +82,7 @@ func (s *URLService) ShortenURL(ctx context.Context, originalURL, userID string)
 	if err != nil {
 		// Проверяем, является ли ошибка конфликтом
 		var conflictErr *storage.ErrConflict
-		if storage.IsConflictError(err) {
+		if errors.As(err, &conflictErr) {
 			// URL уже существует, возвращаем существующий short URL
 			existingShortURL := fmt.Sprintf("%s/%s", s.config.BaseURL, conflictErr.ShortID)
 			return existingShortURL, 409, nil

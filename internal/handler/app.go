@@ -2,13 +2,10 @@ package handler
 
 import (
 	"context"
-	cryptoRand "crypto/rand"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
-	mathRand "math/rand"
 	"net/http"
 	"strings"
 
@@ -176,8 +173,8 @@ func (app *App) CreateShortURLBatch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		
-		// Генерируем ID
-		id := generateID()
+		// Генерируем ID через service
+		id := app.urlService.GenerateID()
 		shortURL := fmt.Sprintf("%s/%s", app.config.BaseURL, id)
 		
 		batchItems = append(batchItems, storage.BatchItem{
