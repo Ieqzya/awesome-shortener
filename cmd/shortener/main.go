@@ -1,112 +1,131 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"io"
-	"math/rand"
+	"log"
 	"net/http"
-	"strings"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"awesome-shortener/internal/config"
+	"awesome-shortener/internal/handler"
+	"awesome-shortener/internal/middleware"
+	"awesome-shortener/internal/storage"
+	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
 )
 
-// Простое хранилище URL в памяти
-var urlStorage = make(map[string]string)
-
-// Функция для генерации случайного ID
-func generateID() string {
-	const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	result := make([]byte, 8)
-	for i := range result {
-		result[i] = chars[rand.Intn(len(chars))]
-	}
-	return string(result)
-}
-
-// Обработчик для создания короткой ссылки (POST /)
-func createShortURL(w http.ResponseWriter, r *http.Request) {
-	// Проверяем метод
-	if r.Method != http.MethodPost {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
-		return
-	}
-
-	// Читаем тело запроса
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
-		return
-	}
-
-	originalURL := strings.TrimSpace(string(body))
-	
-	// Проверяем, что URL не пустой
-	if originalURL == "" {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
-		return
-	}
-
-	// Генерируем ID и сохраняем
-	id := generateID()
-	urlStorage[id] = originalURL
-
-	// Возвращаем короткую ссылку
-	shortURL := fmt.Sprintf("http://localhost:8080/%s", id)
-	w.Header().Set("Content-Type", "text/plain")
-	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte(shortURL))
-}
-
-// Обработчик для перенаправления (GET /{id})
-func redirectToOriginal(w http.ResponseWriter, r *http.Request) {
-	// Проверяем метод
-	if r.Method != http.MethodGet {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
-		return
-	}
-
-	// Получаем ID из пути
-	path := r.URL.Path
-	if path == "/" {
-		// Если путь просто "/", то это POST запрос для создания ссылки
-		createShortURL(w, r)
-		return
-	}
-
-	id := strings.TrimPrefix(path, "/")
-	
-	// Проверяем, что ID не пустой
-	if id == "" {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
-		return
-	}
-
-	// Ищем оригинальный URL
-	originalURL, exists := urlStorage[id]
-	if !exists {
-		http.Error(w, "Bad Request", http.StatusBadRequest)
-		return
-	}
-
-	// Перенаправляем
-	w.Header().Set("Location", originalURL)
-	w.WriteHeader(http.StatusTemporaryRedirect)
-}
-
 func main() {
-	// Настраиваем маршруты
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && r.URL.Path == "/" {
-			createShortURL(w, r)
-		} else if r.Method == http.MethodGet && r.URL.Path != "/" {
-			redirectToOriginal(w, r)
-		} else {
-			http.Error(w, "Bad Request", http.StatusBadRequest)
-		}
-	})
-
-	// Запускаем сервер
-	fmt.Println("Сервер запущен на http://localhost:8080")
-	err := http.ListenAndServe(":8080", nil)
+	// Инициализируем конфигурацию
+	cfg, err := config.NewConfig()
 	if err != nil {
-		fmt.Printf("Ошибка запуска сервера: %v\n", err)
+		log.Fatalf("Ошибка инициализации конфигурации: %v", err)
 	}
+
+	// Выбираем хранилище с fallback логикой:
+	// 1. PostgreSQL (если DATABASE_DSN задан)
+	// 2. Файл (если FILE_STORAGE_PATH задан)
+	// 3. Память (по умолчанию)
+	var store storage.Storage
+	var db *storage.Database
+
+	// Пытаемся подключиться к PostgreSQL
+	if cfg.DatabaseDSN != "" {
+		db, err = storage.NewDatabase(cfg.DatabaseDSN)
+		if err != nil {
+			log.Printf("Предупреждение: не удалось подключиться к БД: %v", err)
+		} else {
+			store = db
+			defer db.Close()
+			fmt.Println("Хранилище: PostgreSQL")
+		}
+	}
+
+	// Если БД не подключена, пытаемся использовать файл
+	if store == nil && cfg.FileStoragePath != "" {
+		fileStorage, err := storage.NewFileStorage(cfg.FileStoragePath)
+		if err != nil {
+			log.Printf("Предупреждение: не удалось открыть файл: %v", err)
+		} else {
+			store = fileStorage
+			defer fileStorage.Close()
+			fmt.Printf("Хранилище: файл (%s)\n", cfg.FileStoragePath)
+		}
+	}
+
+	// Если ничего не подключено, используем память
+	if store == nil {
+		store = storage.NewMemoryStorage()
+		fmt.Println("Хранилище: память")
+	}
+
+	// Создаем приложение с dependency injection
+	app := handler.NewApp(cfg, store)
+
+	// Инициализируем zap логгер
+	logger, err := zap.NewProduction()
+	if err != nil {
+		log.Fatalf("Ошибка инициализации логгера: %v", err)
+	}
+	defer logger.Sync()
+
+	r := chi.NewRouter()
+	
+	// Добавляем middleware для gzip сжатия
+	r.Use(middleware.GzipMiddleware)
+	// Добавляем middleware для логирования
+	r.Use(middleware.Logger(logger))
+	
+	// Регистрируем обработчики
+	r.Post("/", app.CreateShortURL)
+	r.Post("/api/shorten", app.CreateShortURLJSON)
+	r.Post("/api/shorten/batch", app.CreateShortURLBatch)
+	r.Get("/{id}", app.RedirectToOriginal)
+	r.Get("/api/user/urls", app.GetUserURLs)
+	r.Delete("/api/user/urls", app.DeleteUserURLs)
+	
+	// Добавляем хендлер для проверки соединения с БД
+	r.Get("/ping", handler.PingDatabase(db))
+
+	fmt.Printf("Сервер запущен на %s\n", cfg.ServerAddress)
+	fmt.Printf("Базовый URL: %s\n", cfg.BaseURL)
+	if cfg.DatabaseDSN != "" {
+		fmt.Println("База данных: подключена")
+	}
+	
+	// Graceful shutdown
+	server := &http.Server{
+		Addr:    cfg.ServerAddress,
+		Handler: r,
+	}
+	
+	// Запускаем сервер в отдельной горутине
+	go func() {
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Ошибка запуска сервера: %v", err)
+		}
+	}()
+	
+	// Ожидаем сигнал завершения
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	<-quit
+	
+	fmt.Println("Завершение работы сервера...")
+	
+	// Останавливаем приложение
+	app.Shutdown()
+	
+	// Останавливаем HTTP сервер
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	
+	if err := server.Shutdown(ctx); err != nil {
+		log.Printf("Ошибка при завершении сервера: %v", err)
+	}
+	
+	fmt.Println("Сервер остановлен")
 }
