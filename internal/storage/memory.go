@@ -6,20 +6,29 @@ import (
 	"sync"
 )
 
-// MemoryURLRecord внутренняя структура для хранения URL с user_id
+// MemoryURLRecord представляет внутреннюю структуру для хранения URL в памяти.
+//
+// Содержит дополнительные поля для поддержки функциональности
+// пользователей и мягкого удаления.
 type MemoryURLRecord struct {
-	OriginalURL string
-	UserID      string
-	IsDeleted   bool
+	OriginalURL string // оригинальный URL
+	UserID      string // идентификатор пользователя-владельца
+	IsDeleted   bool   // флаг мягкого удаления
 }
 
-// MemoryStorage хранилище URL в памяти
+// MemoryStorage реализует хранилище URL в оперативной памяти.
+//
+// Предоставляет быстрое хранилище для разработки и тестирования.
+// Все данные теряются при перезапуске приложения.
+// Реализация потокобезопасна.
 type MemoryStorage struct {
-	urls map[string]MemoryURLRecord
-	mu   sync.RWMutex
+	urls map[string]MemoryURLRecord // карта для хранения URL записей
+	mu   sync.RWMutex               // мьютекс для потокобезопасности
 }
 
-// NewMemoryStorage создает новое хранилище в памяти
+// NewMemoryStorage создает новое хранилище в оперативной памяти.
+//
+// Возвращает инициализированный MemoryStorage с пустой картой URL.
 func NewMemoryStorage() *MemoryStorage {
 	return &MemoryStorage{
 		urls: make(map[string]MemoryURLRecord),

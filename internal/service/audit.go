@@ -13,39 +13,60 @@ import (
 	"awesome-shortener/internal/model"
 )
 
-// AuditObserver интерфейс наблюдателя для аудита
+// AuditObserver определяет интерфейс наблюдателя для системы аудита.
+//
+// Реализации этого интерфейса получают уведомления о событиях аудита
+// и могут обрабатывать их различными способами (запись в файл, отправка по HTTP и т.д.).
 type AuditObserver interface {
+	// Notify обрабатывает событие аудита.
+	// Возвращает ошибку, если обработка не удалась.
 	Notify(event model.AuditEvent) error
 }
 
-// AuditSubject интерфейс субъекта для аудита
+// AuditSubject определяет интерфейс субъекта в паттерне Observer для аудита.
+//
+// Субъект управляет списком наблюдателей и уведомляет их о событиях.
 type AuditSubject interface {
+	// Subscribe добавляет наблюдателя в список уведомлений.
 	Subscribe(observer AuditObserver)
+	// Unsubscribe удаляет наблюдателя из списка уведомлений.
 	Unsubscribe(observer AuditObserver)
+	// NotifyAll отправляет событие всем подписанным наблюдателям.
 	NotifyAll(event model.AuditEvent)
 }
 
-// AuditService реализует паттерн Subject для аудита
+// AuditService реализует паттерн Subject для системы аудита.
+//
+// Сервис управляет списком наблюдателей и обеспечивает
+// асинхронную доставку событий аудита всем подписчикам.
 type AuditService struct {
-	observers []AuditObserver
-	mutex     sync.RWMutex
+	observers []AuditObserver // список наблюдателей
+	mutex     sync.RWMutex    // мьютекс для безопасного доступа к списку
 }
 
-// NewAuditService создает новый сервис аудита
+// NewAuditService создает новый экземпляр сервиса аудита.
+//
+// Возвращает инициализированный AuditService с пустым списком наблюдателей.
 func NewAuditService() *AuditService {
 	return &AuditService{
 		observers: make([]AuditObserver, 0),
 	}
 }
 
-// Subscribe добавляет наблюдателя
+// Subscribe добавляет наблюдателя в список уведомлений.
+//
+// Параметры:
+//   - observer: наблюдатель, реализующий интерфейс AuditObserver
 func (as *AuditService) Subscribe(observer AuditObserver) {
 	as.mutex.Lock()
 	defer as.mutex.Unlock()
 	as.observers = append(as.observers, observer)
 }
 
-// Unsubscribe удаляет наблюдателя
+// Unsubscribe удаляет наблюдателя из списка уведомлений.
+//
+// Параметры:
+//   - observer: наблюдатель для удаления
 func (as *AuditService) Unsubscribe(observer AuditObserver) {
 	as.mutex.Lock()
 	defer as.mutex.Unlock()
@@ -57,7 +78,13 @@ func (as *AuditService) Unsubscribe(observer AuditObserver) {
 	}
 }
 
-// NotifyAll уведомляет всех наблюдателей
+// NotifyAll асинхронно уведомляет всех наблюдателей о событии аудита.
+//
+// Каждый наблюдатель вызывается в отдельной горутине для предотвращения
+// блокировки основного потока выполнения.
+//
+// Параметры:
+//   - event: событие аудита для отправки наблюдателям
 func (as *AuditService) NotifyAll(event model.AuditEvent) {
 	as.mutex.RLock()
 	defer as.mutex.RUnlock()
@@ -73,20 +100,36 @@ func (as *AuditService) NotifyAll(event model.AuditEvent) {
 	}
 }
 
-// FileAuditObserver реализует запись аудита в файл
+// FileAuditObserver реализует запись событий аудита в файл.
+//
+// Наблюдатель сериализует события в JSON формат и записывает
+// их в указанный файл с автоматическим созданием директорий.
 type FileAuditObserver struct {
-	filePath string
-	mutex    sync.Mutex
+	filePath string     // путь к файлу для записи
+	mutex    sync.Mutex // мьютекс для безопасной записи в файл
 }
 
-// NewFileAuditObserver создает наблюдателя для записи в файл
+// NewFileAuditObserver создает новый наблюдатель для записи в файл.
+//
+// Параметры:
+//   - filePath: путь к файлу для записи событий аудита
+//
+// Возвращает настроенный FileAuditObserver.
 func NewFileAuditObserver(filePath string) *FileAuditObserver {
 	return &FileAuditObserver{
 		filePath: filePath,
 	}
 }
 
-// Notify записывает событие в файл
+// Notify записывает событие аудита в файл в формате JSON.
+//
+// Функция создает необходимые директории, открывает файл в режиме append
+// и записывает событие как JSON строку с переносом строки.
+//
+// Параметры:
+//   - event: событие аудита для записи
+//
+// Возвращает ошибку, если запись не удалась.
 func (fao *FileAuditObserver) Notify(event model.AuditEvent) error {
 	fao.mutex.Lock()
 	defer fao.mutex.Unlock()
@@ -121,13 +164,21 @@ func (fao *FileAuditObserver) Notify(event model.AuditEvent) error {
 	return file.Sync()
 }
 
-// HTTPAuditObserver реализует отправку аудита на удаленный сервер
+// HTTPAuditObserver реализует отправку событий аудита на удаленный сервер по HTTP.
+//
+// Наблюдатель сериализует события в JSON и отправляет их POST запросом
+// на указанный URL с настроенным таймаутом.
 type HTTPAuditObserver struct {
-	url    string
-	client *http.Client
+	url    string       // URL удаленного сервера
+	client *http.Client // HTTP клиент с настроенным таймаутом
 }
 
-// NewHTTPAuditObserver создает наблюдателя для отправки по HTTP
+// NewHTTPAuditObserver создает новый наблюдатель для отправки по HTTP.
+//
+// Параметры:
+//   - url: URL удаленного сервера для отправки событий аудита
+//
+// Возвращает настроенный HTTPAuditObserver с таймаутом 5 секунд.
 func NewHTTPAuditObserver(url string) *HTTPAuditObserver {
 	return &HTTPAuditObserver{
 		url: url,
@@ -137,7 +188,15 @@ func NewHTTPAuditObserver(url string) *HTTPAuditObserver {
 	}
 }
 
-// Notify отправляет событие на удаленный сервер
+// Notify отправляет событие аудита на удаленный сервер по HTTP.
+//
+// Функция сериализует событие в JSON и отправляет POST запрос
+// с заголовком Content-Type: application/json.
+//
+// Параметры:
+//   - event: событие аудита для отправки
+//
+// Возвращает ошибку, если отправка не удалась или сервер вернул ошибку.
 func (hao *HTTPAuditObserver) Notify(event model.AuditEvent) error {
 	// Сериализуем событие в JSON
 	data, err := json.Marshal(event)

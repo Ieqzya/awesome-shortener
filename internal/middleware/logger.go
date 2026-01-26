@@ -1,3 +1,7 @@
+// Package middleware предоставляет HTTP middleware для сервиса сокращения URL.
+//
+// Пакет содержит middleware для логирования запросов и ответов,
+// а также для поддержки gzip сжатия входящих и исходящих данных.
 package middleware
 
 import (
@@ -25,7 +29,26 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 	return size, err
 }
 
-// Logger создает middleware для логирования HTTP запросов и ответов
+// Logger создает middleware для логирования HTTP запросов и ответов.
+//
+// Middleware логирует следующую информацию о каждом запросе:
+//   - URI запроса
+//   - HTTP метод
+//   - Время выполнения запроса
+//   - Код статуса ответа
+//   - Размер ответа в байтах
+//
+// Все сообщения логируются на уровне Info с использованием zap.Logger.
+//
+// Параметры:
+//   - logger: настроенный zap.Logger для записи логов
+//
+// Возвращает middleware функцию для использования с HTTP роутером.
+//
+// Пример использования:
+//
+//	logger, _ := zap.NewProduction()
+//	r.Use(middleware.Logger(logger))
 func Logger(logger *zap.Logger) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

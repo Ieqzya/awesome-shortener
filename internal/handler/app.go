@@ -1,3 +1,8 @@
+// Package handler содержит HTTP обработчики для сервиса сокращения URL.
+//
+// Пакет предоставляет структуру App с dependency injection и методы
+// для обработки всех HTTP эндпоинтов: создание коротких URL,
+// перенаправление, управление пользовательскими URL и проверка здоровья БД.
 package handler
 
 import (
@@ -18,15 +23,28 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// App представляет приложение с зависимостями
+// App представляет основное приложение с внедренными зависимостями.
+//
+// Структура инкапсулирует все необходимые сервисы и конфигурацию
+// для обработки HTTP запросов. Использует dependency injection
+// для слабой связанности компонентов.
 type App struct {
-	config       *config.Config
-	urlService   *service.URLService
-	storage      storage.Storage // Оставляем для обратной совместимости с тестами
-	auditService *service.AuditService
+	config       *config.Config        // конфигурация приложения
+	urlService   *service.URLService   // сервис для работы с URL
+	storage      storage.Storage       // хранилище (для обратной совместимости с тестами)
+	auditService *service.AuditService // сервис аудита
 }
 
-// NewApp создает новое приложение
+// NewApp создает новый экземпляр приложения с внедренными зависимостями.
+//
+// Функция инициализирует все сервисы и настраивает систему аудита
+// в соответствии с конфигурацией.
+//
+// Параметры:
+//   - cfg: конфигурация приложения
+//   - store: реализация интерфейса Storage
+//
+// Возвращает настроенное приложение готовое к обработке запросов.
 func NewApp(cfg *config.Config, store storage.Storage) *App {
 	app := &App{
 		config:       cfg,
@@ -56,33 +74,44 @@ func (app *App) setupAudit() {
 	}
 }
 
-// Shutdown gracefully останавливает приложение
+// Shutdown корректно останавливает приложение и освобождает ресурсы.
+//
+// Функция должна вызываться при завершении работы приложения
+// для корректного завершения всех фоновых операций.
 func (app *App) Shutdown() {
 	if app.urlService != nil {
 		app.urlService.Shutdown()
 	}
 }
 
-// ShortenRequest представляет запрос на сокращение URL в JSON формате
+// ShortenRequest представляет структуру запроса на сокращение URL в JSON формате.
+//
+// Используется для десериализации JSON запросов к эндпоинту /api/shorten.
 type ShortenRequest struct {
-	URL string `json:"url"`
+	URL string `json:"url"` // URL для сокращения
 }
 
-// ShortenResponse представляет ответ с сокращенным URL в JSON формате
+// ShortenResponse представляет структуру ответа с сокращенным URL в JSON формате.
+//
+// Используется для сериализации JSON ответов от эндпоинта /api/shorten.
 type ShortenResponse struct {
-	Result string `json:"result"`
+	Result string `json:"result"` // сокращенный URL
 }
 
-// BatchShortenRequest представляет элемент запроса для batch сокращения
+// BatchShortenRequest представляет элемент запроса для batch сокращения URL.
+//
+// Используется в массовых операциях сокращения нескольких URL за один запрос.
 type BatchShortenRequest struct {
-	CorrelationID string `json:"correlation_id"`
-	OriginalURL   string `json:"original_url"`
+	CorrelationID string `json:"correlation_id"` // идентификатор для связи запроса и ответа
+	OriginalURL   string `json:"original_url"`   // оригинальный URL для сокращения
 }
 
-// BatchShortenResponse представляет элемент ответа для batch сокращения
+// BatchShortenResponse представляет элемент ответа для batch сокращения URL.
+//
+// Используется в ответах на массовые операции сокращения URL.
 type BatchShortenResponse struct {
-	CorrelationID string `json:"correlation_id"`
-	ShortURL      string `json:"short_url"`
+	CorrelationID string `json:"correlation_id"` // идентификатор для связи запроса и ответа
+	ShortURL      string `json:"short_url"`      // сокращенный URL
 }
 
 // auditShorten создает событие аудита для сокращения URL
@@ -137,7 +166,22 @@ func (app *App) shortenURL(ctx context.Context, w http.ResponseWriter, r *http.R
 	return shortURL, statusCode, err
 }
 
-// CreateShortURL обрабатывает создание короткого URL (текстовый и JSON)
+// CreateShortURL обрабатывает создание коротких URL для текстовых и JSON запросов.
+//
+// Эндпоинт поддерживает два формата:
+//   - Текстовый: тело запроса содержит URL как plain text
+//   - JSON: тело запроса содержит {"url": "http://example.com"}
+//
+// Автоматически определяет формат по заголовку Content-Type и возвращает
+// ответ в том же формате. Создает или получает ID пользователя из cookie.
+//
+// HTTP методы: POST
+// Пути: /
+//
+// Возможные ответы:
+//   - 201 Created: URL успешно сокращен
+//   - 409 Conflict: URL уже существует (возвращает существующий)
+//   - 400 Bad Request: некорректный запрос
 func (app *App) CreateShortURL(w http.ResponseWriter, r *http.Request) {
 	contentType := r.Header.Get("Content-Type")
 
@@ -180,7 +224,22 @@ func (app *App) CreateShortURL(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// CreateShortURLJSON обрабатывает создание короткого URL только для JSON
+// CreateShortURLJSON обрабатывает создание коротких URL только для JSON запросов.
+//
+// Специализированный эндпоинт для JSON API, принимает только JSON запросы
+// и возвращает только JSON ответы.
+//
+// HTTP методы: POST
+// Пути: /api/shorten
+//
+// Формат запроса: {"url": "http://example.com"}
+// Формат ответа: {"result": "http://localhost:8080/abc123"}
+//
+// Возможные ответы:
+//   - 201 Created: URL успешно сокращен
+//   - 409 Conflict: URL уже существует
+//   - 400 Bad Request: некорректный JSON или пустой URL
+//   - 500 Internal Server Error: ошибка сериализации ответа
 func (app *App) CreateShortURLJSON(w http.ResponseWriter, r *http.Request) {
 	var req ShortenRequest
 
@@ -208,7 +267,21 @@ func (app *App) CreateShortURLJSON(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// CreateShortURLBatch обрабатывает batch создание коротких URL
+// CreateShortURLBatch обрабатывает массовое создание коротких URL.
+//
+// Эндпоинт принимает массив URL для одновременного сокращения,
+// что повышает производительность при обработке множественных запросов.
+//
+// HTTP методы: POST
+// Пути: /api/shorten/batch
+//
+// Формат запроса: [{"correlation_id": "1", "original_url": "http://example.com"}]
+// Формат ответа: [{"correlation_id": "1", "short_url": "http://localhost:8080/abc123"}]
+//
+// Возможные ответы:
+//   - 201 Created: все URL успешно сокращены
+//   - 400 Bad Request: некорректный JSON или пустой массив
+//   - 500 Internal Server Error: ошибка сохранения в хранилище
 func (app *App) CreateShortURLBatch(w http.ResponseWriter, r *http.Request) {
 	var requests []BatchShortenRequest
 
@@ -271,7 +344,19 @@ func (app *App) CreateShortURLBatch(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// RedirectToOriginal обрабатывает перенаправление на оригинальный URL
+// RedirectToOriginal обрабатывает перенаправление на оригинальный URL.
+//
+// Эндпоинт получает короткий идентификатор из URL пути,
+// находит соответствующий оригинальный URL и выполняет перенаправление.
+// Логирует событие аудита при успешном переходе.
+//
+// HTTP методы: GET
+// Пути: /{id}
+//
+// Возможные ответы:
+//   - 307 Temporary Redirect: успешное перенаправление
+//   - 400 Bad Request: URL не найден
+//   - 410 Gone: URL был удален
 func (app *App) RedirectToOriginal(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
@@ -295,7 +380,20 @@ func (app *App) RedirectToOriginal(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusTemporaryRedirect)
 }
 
-// GetUserURLs возвращает все URL пользователя
+// GetUserURLs возвращает все URL, принадлежащие текущему пользователю.
+//
+// Эндпоинт извлекает ID пользователя из cookie и возвращает
+// список всех его сокращенных URL в JSON формате.
+//
+// HTTP методы: GET
+// Пути: /api/user/urls
+//
+// Формат ответа: [{"short_url": "http://localhost:8080/abc123", "original_url": "http://example.com"}]
+//
+// Возможные ответы:
+//   - 200 OK: список URL пользователя
+//   - 204 No Content: у пользователя нет URL
+//   - 500 Internal Server Error: ошибка получения данных
 func (app *App) GetUserURLs(w http.ResponseWriter, r *http.Request) {
 	// Получаем или создаем ID пользователя
 	userID := auth.GetOrCreateUserID(w, r)
@@ -323,7 +421,20 @@ func (app *App) GetUserURLs(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// DeleteUserURLs асинхронно удаляет URL пользователя
+// DeleteUserURLs асинхронно удаляет указанные URL пользователя.
+//
+// Эндпоинт принимает массив коротких идентификаторов и помечает
+// соответствующие URL как удаленные. Операция выполняется асинхронно
+// для повышения производительности.
+//
+// HTTP методы: DELETE
+// Пути: /api/user/urls
+//
+// Формат запроса: ["abc123", "def456"]
+//
+// Возможные ответы:
+//   - 202 Accepted: запрос на удаление принят
+//   - 400 Bad Request: некорректный JSON или пустой массив
 func (app *App) DeleteUserURLs(w http.ResponseWriter, r *http.Request) {
 	// Получаем ID пользователя
 	userID := auth.GetOrCreateUserID(w, r)

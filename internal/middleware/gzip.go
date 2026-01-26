@@ -47,7 +47,21 @@ func (c *compressReader) Close() error {
 	return c.ReadCloser.Close()
 }
 
-// GzipMiddleware создает middleware для поддержки gzip сжатия
+// GzipMiddleware создает middleware для поддержки gzip сжатия.
+//
+// Middleware обеспечивает двустороннюю поддержку gzip сжатия:
+//
+// Входящие запросы:
+//   - Автоматически распаковывает запросы с заголовком Content-Encoding: gzip
+//
+// Исходящие ответы:
+//   - Сжимает ответы для клиентов, поддерживающих gzip (заголовок Accept-Encoding: gzip)
+//   - Сжатие применяется только к контенту типов: application/json, text/html, text/plain
+//   - Устанавливает заголовки Content-Encoding: gzip и Vary: Accept-Encoding
+//
+// Пример использования:
+//
+//	r.Use(middleware.GzipMiddleware)
 func GzipMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Проверяем, поддерживает ли клиент gzip

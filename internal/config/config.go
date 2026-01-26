@@ -1,3 +1,7 @@
+// Package config предоставляет функциональность для управления конфигурацией сервиса сокращения URL.
+//
+// Пакет поддерживает конфигурацию через флаги командной строки и переменные окружения
+// с правильным приоритетом: переменные окружения > флаги > значения по умолчанию.
 package config
 
 import (
@@ -9,27 +13,61 @@ import (
 )
 
 // Константы с дефолтными значениями
-const (
-	DefaultServerAddress   = "localhost:8080"
-	DefaultBaseURL         = "http://localhost:8080"
-	DefaultFileStoragePath = "/tmp/short-url-db.json"
-	DefaultDatabaseDSN     = ""
-)
+// DefaultServerAddress - адрес сервера по умолчанию
+const DefaultServerAddress = "localhost:8080"
 
-// Config содержит конфигурацию сервиса
+// DefaultBaseURL - базовый URL по умолчанию для сокращенных ссылок
+const DefaultBaseURL = "http://localhost:8080"
+
+// DefaultFileStoragePath - путь к файлу хранилища по умолчанию
+const DefaultFileStoragePath = "/tmp/short-url-db.json"
+
+// DefaultDatabaseDSN - строка подключения к базе данных по умолчанию (пустая)
+const DefaultDatabaseDSN = ""
+
+// Config содержит конфигурацию сервиса сокращения URL.
+//
+// Структура поддерживает настройку через флаги командной строки и переменные окружения.
+// Приоритет параметров: переменные окружения > флаги > значения по умолчанию.
+//
+// Пример использования:
+//
+//	cfg, err := config.NewConfig()
+//	if err != nil {
+//		log.Fatal(err)
+//	}
+//	fmt.Printf("Server will start on %s\n", cfg.ServerAddress)
 type Config struct {
-	ServerAddress   string // адрес запуска HTTP-сервера
-	BaseURL         string // базовый адрес результирующего сокращённого URL
-	FileStoragePath string // путь до файла с данными
-	DatabaseDSN     string // строка подключения к базе данных
-	AuditFile       string // путь к файлу аудита
-	AuditURL        string // URL удаленного сервера аудита
+	ServerAddress   string // адрес запуска HTTP-сервера (флаг -a, переменная SERVER_ADDRESS)
+	BaseURL         string // базовый адрес результирующего сокращённого URL (флаг -b, переменная BASE_URL)
+	FileStoragePath string // путь до файла с данными (флаг -f, переменная FILE_STORAGE_PATH)
+	DatabaseDSN     string // строка подключения к базе данных (флаг -d, переменная DATABASE_DSN)
+	AuditFile       string // путь к файлу аудита (флаг --audit-file, переменная AUDIT_FILE)
+	AuditURL        string // URL удаленного сервера аудита (флаг --audit-url, переменная AUDIT_URL)
 }
 
 // NewConfig создает и инициализирует конфигурацию с приоритетом:
-// 1. Переменные окружения
+// 1. Переменные окружения (наивысший приоритет)
 // 2. Флаги командной строки
-// 3. Значения по умолчанию
+// 3. Значения по умолчанию (наименьший приоритет)
+//
+// Поддерживаемые флаги:
+//   -a: адрес запуска HTTP-сервера
+//   -b: базовый адрес результирующего сокращённого URL
+//   -f: путь до файла с данными
+//   -d: строка подключения к базе данных
+//   --audit-file: путь к файлу аудита
+//   --audit-url: URL удаленного сервера аудита
+//
+// Поддерживаемые переменные окружения:
+//   SERVER_ADDRESS: адрес запуска HTTP-сервера
+//   BASE_URL: базовый адрес результирующего сокращённого URL
+//   FILE_STORAGE_PATH: путь до файла с данными
+//   DATABASE_DSN: строка подключения к базе данных
+//   AUDIT_FILE: путь к файлу аудита
+//   AUDIT_URL: URL удаленного сервера аудита
+//
+// Возвращает ошибку, если конфигурация не прошла валидацию.
 func NewConfig() (*Config, error) {
 	cfg := &Config{}
 
