@@ -41,7 +41,7 @@ func BenchmarkURLServiceGetOriginalURL(b *testing.B) {
 
 	// Предварительно сохраняем данные
 	for i := 0; i < 1000; i++ {
-		store.Save(ctx, generateTestID(i), "https://example.com/test", "user123")
+		store.SaveURLWithUser(ctx, generateTestID(i), "https://example.com/test", "user123")
 	}
 
 	b.ResetTimer()

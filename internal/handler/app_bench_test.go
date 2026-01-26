@@ -75,7 +75,7 @@ func BenchmarkRedirectToOriginal(b *testing.B) {
 
 	// Предварительно сохраняем URL
 	ctx := context.Background()
-	store.Save(ctx, "testid", "https://example.com/test", "user123")
+	store.SaveURLWithUser(ctx, "testid", "https://example.com/test", "user123")
 
 	b.ResetTimer()
 	b.ReportAllocs()
