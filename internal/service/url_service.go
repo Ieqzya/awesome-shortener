@@ -29,9 +29,9 @@ type URLService struct {
 
 	// Канал для graceful shutdown
 	deleteChan chan deleteRequest // канал для запросов на удаление
-	wg         sync.WaitGroup      // группа ожидания для graceful shutdown
-	ctx        context.Context     // контекст для отмены операций
-	cancel     context.CancelFunc  // функция отмены контекста
+	wg         sync.WaitGroup     // группа ожидания для graceful shutdown
+	ctx        context.Context    // контекст для отмены операций
+	cancel     context.CancelFunc // функция отмены контекста
 }
 
 type deleteRequest struct {

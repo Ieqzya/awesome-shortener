@@ -13,7 +13,7 @@ package model
 //		OriginalURL: "https://example.com",
 //	}
 type URLRecord struct {
-	UUID        string `json:"uuid"`        // уникальный идентификатор записи
-	ShortURL    string `json:"short_url"`   // короткий идентификатор URL
+	UUID        string `json:"uuid"`         // уникальный идентификатор записи
+	ShortURL    string `json:"short_url"`    // короткий идентификатор URL
 	OriginalURL string `json:"original_url"` // оригинальный URL
 }
