@@ -8,9 +8,11 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"awesome-shortener/internal/auth"
 	"awesome-shortener/internal/config"
+	"awesome-shortener/internal/model"
 	"awesome-shortener/internal/service"
 	"awesome-shortener/internal/storage"
 	"github.com/go-chi/chi/v5"
@@ -18,17 +20,39 @@ import (
 
 // App представляет приложение с зависимостями
 type App struct {
-	config     *config.Config
-	urlService *service.URLService
-	storage    storage.Storage // Оставляем для обратной совместимости с тестами
+	config       *config.Config
+	urlService   *service.URLService
+	storage      storage.Storage // Оставляем для обратной совместимости с тестами
+	auditService *service.AuditService
 }
 
 // NewApp создает новое приложение
 func NewApp(cfg *config.Config, store storage.Storage) *App {
-	return &App{
-		config:     cfg,
-		urlService: service.NewURLService(store, cfg),
-		storage:    store,
+	app := &App{
+		config:       cfg,
+		urlService:   service.NewURLService(store, cfg),
+		storage:      store,
+		auditService: service.NewAuditService(),
+	}
+	
+	// Настраиваем аудит
+	app.setupAudit()
+	
+	return app
+}
+
+// setupAudit настраивает наблюдателей для аудита
+func (app *App) setupAudit() {
+	// Добавляем файловый аудит если указан путь
+	if app.config.AuditFile != "" {
+		fileObserver := service.NewFileAuditObserver(app.config.AuditFile)
+		app.auditService.Subscribe(fileObserver)
+	}
+	
+	// Добавляем HTTP аудит если указан URL
+	if app.config.AuditURL != "" {
+		httpObserver := service.NewHTTPAuditObserver(app.config.AuditURL)
+		app.auditService.Subscribe(httpObserver)
 	}
 }
 
@@ -61,6 +85,37 @@ type BatchShortenResponse struct {
 	ShortURL      string `json:"short_url"`
 }
 
+// auditShorten создает событие аудита для сокращения URL
+func (app *App) auditShorten(userID, originalURL string) {
+	if app.auditService == nil {
+		return
+	}
+	
+	event := model.AuditEvent{
+		Timestamp: time.Now().Unix(),
+		Action:    model.ActionShorten,
+		UserID:    userID,
+		URL:       originalURL,
+	}
+	
+	app.auditService.NotifyAll(event)
+}
+
+// auditFollow создает событие аудита для перехода по ссылке
+func (app *App) auditFollow(userID, originalURL string) {
+	if app.auditService == nil {
+		return
+	}
+	
+	event := model.AuditEvent{
+		Timestamp: time.Now().Unix(),
+		Action:    model.ActionFollow,
+		UserID:    userID,
+		URL:       originalURL,
+	}
+	
+	app.auditService.NotifyAll(event)
+}
 // shortenURL общая логика для сокращения URL
 func (app *App) shortenURL(ctx context.Context, w http.ResponseWriter, r *http.Request, originalURL string) (string, int, error) {
 	// Получаем или создаем ID пользователя
@@ -70,6 +125,12 @@ func (app *App) shortenURL(ctx context.Context, w http.ResponseWriter, r *http.R
 	shortURL, statusCode, err := app.urlService.ShortenURL(ctx, originalURL, userID)
 	if err != nil && statusCode >= 500 {
 		log.Printf("Ошибка сокращения URL: %v", err)
+		return shortURL, statusCode, err
+	}
+	
+	// Аудит успешного сокращения
+	if statusCode < 400 {
+		app.auditShorten(userID, originalURL)
 	}
 	
 	return shortURL, statusCode, err
@@ -224,6 +285,10 @@ func (app *App) RedirectToOriginal(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}
+	
+	// Аудит успешного перехода
+	userID := auth.GetOrCreateUserID(w, r)
+	app.auditFollow(userID, originalURL)
 	
 	w.Header().Set("Location", originalURL)
 	w.WriteHeader(http.StatusTemporaryRedirect)

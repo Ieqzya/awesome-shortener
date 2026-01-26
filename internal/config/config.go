@@ -22,6 +22,8 @@ type Config struct {
 	BaseURL         string // базовый адрес результирующего сокращённого URL
 	FileStoragePath string // путь до файла с данными
 	DatabaseDSN     string // строка подключения к базе данных
+	AuditFile       string // путь к файлу аудита
+	AuditURL        string // URL удаленного сервера аудита
 }
 
 // NewConfig создает и инициализирует конфигурацию с приоритетом:
@@ -42,6 +44,8 @@ func NewConfig() (*Config, error) {
 	flag.StringVar(&cfg.BaseURL, "b", cfg.BaseURL, "базовый адрес результирующего сокращённого URL")
 	flag.StringVar(&cfg.FileStoragePath, "f", cfg.FileStoragePath, "путь до файла с данными")
 	flag.StringVar(&cfg.DatabaseDSN, "d", cfg.DatabaseDSN, "строка подключения к базе данных")
+	flag.StringVar(&cfg.AuditFile, "audit-file", cfg.AuditFile, "путь к файлу аудита")
+	flag.StringVar(&cfg.AuditURL, "audit-url", cfg.AuditURL, "URL удаленного сервера аудита")
 	flag.Parse()
 
 	// Переопределяем переменными окружения (наивысший приоритет)
@@ -59,6 +63,14 @@ func NewConfig() (*Config, error) {
 
 	if envDatabaseDSN := strings.TrimSpace(os.Getenv("DATABASE_DSN")); envDatabaseDSN != "" {
 		cfg.DatabaseDSN = envDatabaseDSN
+	}
+
+	if envAuditFile := strings.TrimSpace(os.Getenv("AUDIT_FILE")); envAuditFile != "" {
+		cfg.AuditFile = envAuditFile
+	}
+
+	if envAuditURL := strings.TrimSpace(os.Getenv("AUDIT_URL")); envAuditURL != "" {
+		cfg.AuditURL = envAuditURL
 	}
 
 	// Валидация конфигурации
