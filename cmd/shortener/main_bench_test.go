@@ -71,12 +71,12 @@ func BenchmarkJSONCreation(b *testing.B) {
 // BenchmarkHTTPRequest бенчмарк HTTP запроса
 func BenchmarkHTTPRequest(b *testing.B) {
 	b.ReportAllocs()
-	
+
 	for i := 0; i < b.N; i++ {
 		body := strings.NewReader("https://example.com/test")
 		req := httptest.NewRequest("POST", "/", body)
 		w := httptest.NewRecorder()
-		
+
 		// Симулируем обработку запроса
 		_ = req
 		_ = w

@@ -28,7 +28,7 @@ func TestGetUserURLs_NoAuth(t *testing.T) {
 	if w.Code != 204 {
 		t.Errorf("Ожидали код 204, получили %d", w.Code)
 	}
-	
+
 	// Проверяем, что кука была установлена
 	result := w.Result()
 	defer result.Body.Close()
@@ -95,15 +95,15 @@ func TestGetUserURLs_Success(t *testing.T) {
 	for i, url := range urls {
 		body := strings.NewReader(url)
 		req := httptest.NewRequest("POST", "/", body)
-		
+
 		// Если есть кука, добавляем её
 		if savedCookie != nil {
 			req.AddCookie(savedCookie)
 		}
-		
+
 		w := httptest.NewRecorder()
 		app.CreateShortURL(w, req)
-		
+
 		// Сохраняем куку из первого запроса
 		if i == 0 {
 			result := w.Result()

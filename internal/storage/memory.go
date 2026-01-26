@@ -35,14 +35,14 @@ func (m *MemoryStorage) SaveURL(ctx context.Context, shortID, originalURL string
 func (m *MemoryStorage) SaveURLWithUser(ctx context.Context, shortID, originalURL, userID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	// Проверяем, существует ли уже такой URL
 	for existingShortID, record := range m.urls {
 		if record.OriginalURL == originalURL {
 			return &ErrConflict{ShortID: existingShortID}
 		}
 	}
-	
+
 	m.urls[shortID] = MemoryURLRecord{
 		OriginalURL: originalURL,
 		UserID:      userID,
@@ -54,7 +54,7 @@ func (m *MemoryStorage) SaveURLWithUser(ctx context.Context, shortID, originalUR
 func (m *MemoryStorage) GetURL(ctx context.Context, shortID string) (string, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	record, exists := m.urls[shortID]
 	if !exists {
 		return "", fmt.Errorf("URL не найден")
@@ -69,7 +69,7 @@ func (m *MemoryStorage) GetURL(ctx context.Context, shortID string) (string, err
 func (m *MemoryStorage) GetByOriginalURL(ctx context.Context, originalURL string) (string, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	for shortID, record := range m.urls {
 		if record.OriginalURL == originalURL {
 			return shortID, nil
@@ -82,7 +82,7 @@ func (m *MemoryStorage) GetByOriginalURL(ctx context.Context, originalURL string
 func (m *MemoryStorage) GetUserURLs(ctx context.Context, userID string) ([]UserURLRecord, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	var records []UserURLRecord
 	for shortID, record := range m.urls {
 		if record.UserID == userID {
@@ -92,7 +92,7 @@ func (m *MemoryStorage) GetUserURLs(ctx context.Context, userID string) ([]UserU
 			})
 		}
 	}
-	
+
 	return records, nil
 }
 
@@ -105,7 +105,7 @@ func (m *MemoryStorage) SaveBatch(ctx context.Context, items []BatchItem) error 
 func (m *MemoryStorage) SaveBatchWithUser(ctx context.Context, items []BatchItem, userID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	for _, item := range items {
 		m.urls[item.ShortID] = MemoryURLRecord{
 			OriginalURL: item.OriginalURL,
@@ -124,7 +124,7 @@ func (m *MemoryStorage) Close() error {
 func (m *MemoryStorage) DeleteURLs(ctx context.Context, shortIDs []string, userID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	for _, shortID := range shortIDs {
 		if record, exists := m.urls[shortID]; exists && record.UserID == userID {
 			record.IsDeleted = true
@@ -138,7 +138,7 @@ func (m *MemoryStorage) DeleteURLs(ctx context.Context, shortIDs []string, userI
 func (m *MemoryStorage) IsDeleted(ctx context.Context, shortID string) (bool, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	record, exists := m.urls[shortID]
 	if !exists {
 		return false, fmt.Errorf("URL не найден")

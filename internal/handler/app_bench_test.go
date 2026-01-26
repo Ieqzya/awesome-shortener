@@ -18,7 +18,7 @@ func BenchmarkCreateShortURL(b *testing.B) {
 		BaseURL:         "http://localhost:8080",
 		FileStoragePath: "/tmp/bench-test.json",
 	}
-	
+
 	store := storage.NewMemoryStorage()
 	app := NewApp(cfg, store)
 	defer app.Shutdown()
@@ -42,7 +42,7 @@ func BenchmarkCreateShortURLJSON(b *testing.B) {
 		BaseURL:         "http://localhost:8080",
 		FileStoragePath: "/tmp/bench-test.json",
 	}
-	
+
 	store := storage.NewMemoryStorage()
 	app := NewApp(cfg, store)
 	defer app.Shutdown()
@@ -68,7 +68,7 @@ func BenchmarkRedirectToOriginal(b *testing.B) {
 		BaseURL:         "http://localhost:8080",
 		FileStoragePath: "/tmp/bench-test.json",
 	}
-	
+
 	store := storage.NewMemoryStorage()
 	app := NewApp(cfg, store)
 	defer app.Shutdown()
@@ -95,7 +95,7 @@ func BenchmarkBatchCreate(b *testing.B) {
 		BaseURL:         "http://localhost:8080",
 		FileStoragePath: "/tmp/bench-test.json",
 	}
-	
+
 	store := storage.NewMemoryStorage()
 	app := NewApp(cfg, store)
 	defer app.Shutdown()

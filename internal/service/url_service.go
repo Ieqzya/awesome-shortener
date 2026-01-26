@@ -16,7 +16,7 @@ import (
 type URLService struct {
 	storage storage.Storage
 	config  *config.Config
-	
+
 	// Канал для graceful shutdown
 	deleteChan chan deleteRequest
 	wg         sync.WaitGroup
@@ -39,11 +39,11 @@ func NewURLService(store storage.Storage, cfg *config.Config) *URLService {
 		ctx:        ctx,
 		cancel:     cancel,
 	}
-	
+
 	// Запускаем воркер для обработки удалений
 	service.wg.Add(1)
 	go service.deleteWorker()
-	
+
 	return service
 }
 
@@ -52,7 +52,7 @@ func (s *URLService) GenerateID() string {
 	const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	result := make([]byte, 8)
 	randomBytes := make([]byte, 8)
-	
+
 	// Используем crypto/rand для безопасной генерации
 	if _, err := cryptoRand.Read(randomBytes); err != nil {
 		// Fallback на менее безопасный вариант в случае ошибки
@@ -61,7 +61,7 @@ func (s *URLService) GenerateID() string {
 		}
 		return string(result)
 	}
-	
+
 	for i := range result {
 		result[i] = chars[int(randomBytes[i])%len(chars)]
 	}
@@ -76,7 +76,7 @@ func (s *URLService) ShortenURL(ctx context.Context, originalURL, userID string)
 
 	id := s.GenerateID()
 	shortURL := fmt.Sprintf("%s/%s", s.config.BaseURL, id)
-	
+
 	// Сохраняем в хранилище с user_id
 	err := s.storage.SaveURLWithUser(ctx, id, originalURL, userID)
 	if err != nil {
@@ -104,12 +104,12 @@ func (s *URLService) GetUserURLs(ctx context.Context, userID string) ([]storage.
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Преобразуем short_id в полные URL
 	for i := range records {
 		records[i].ShortURL = fmt.Sprintf("%s/%s", s.config.BaseURL, records[i].ShortURL)
 	}
-	
+
 	return records, nil
 }
 
@@ -125,7 +125,7 @@ func (s *URLService) DeleteURLsAsync(shortIDs []string, userID string) {
 // deleteWorker обрабатывает запросы на удаление
 func (s *URLService) deleteWorker() {
 	defer s.wg.Done()
-	
+
 	for {
 		select {
 		case req := <-s.deleteChan:

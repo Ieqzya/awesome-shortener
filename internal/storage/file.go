@@ -112,7 +112,7 @@ func (f *FileStorage) GetURL(ctx context.Context, shortID string) (string, error
 func (f *FileStorage) GetByOriginalURL(ctx context.Context, originalURL string) (string, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	
+
 	for shortID, url := range f.urls {
 		if url == originalURL {
 			return shortID, nil

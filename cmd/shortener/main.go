@@ -73,12 +73,12 @@ func main() {
 	defer logger.Sync()
 
 	r := chi.NewRouter()
-	
+
 	// Добавляем middleware для gzip сжатия
 	r.Use(middleware.GzipMiddleware)
 	// Добавляем middleware для логирования
 	r.Use(middleware.Logger(logger))
-	
+
 	// Регистрируем обработчики
 	r.Post("/", app.CreateShortURL)
 	r.Post("/api/shorten", app.CreateShortURLJSON)
@@ -86,7 +86,7 @@ func main() {
 	r.Get("/{id}", app.RedirectToOriginal)
 	r.Get("/api/user/urls", app.GetUserURLs)
 	r.Delete("/api/user/urls", app.DeleteUserURLs)
-	
+
 	// Добавляем хендлер для проверки соединения с БД
 	r.Get("/ping", handler.PingDatabase(db))
 
@@ -95,37 +95,37 @@ func main() {
 	if cfg.DatabaseDSN != "" {
 		fmt.Println("База данных: подключена")
 	}
-	
+
 	// Graceful shutdown
 	server := &http.Server{
 		Addr:    cfg.ServerAddress,
 		Handler: r,
 	}
-	
+
 	// Запускаем сервер в отдельной горутине
 	go func() {
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Ошибка запуска сервера: %v", err)
 		}
 	}()
-	
+
 	// Ожидаем сигнал завершения
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 	<-quit
-	
+
 	fmt.Println("Завершение работы сервера...")
-	
+
 	// Останавливаем приложение
 	app.Shutdown()
-	
+
 	// Останавливаем HTTP сервер
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	
+
 	if err := server.Shutdown(ctx); err != nil {
 		log.Printf("Ошибка при завершении сервера: %v", err)
 	}
-	
+
 	fmt.Println("Сервер остановлен")
 }
