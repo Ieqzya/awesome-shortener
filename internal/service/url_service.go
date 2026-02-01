@@ -11,7 +11,6 @@ import (
 	cryptoRand "crypto/rand"
 	"errors"
 	"fmt"
-	mathRand "math/rand"
 	"sync"
 
 	"awesome-shortener/internal/config"
@@ -70,27 +69,25 @@ func NewURLService(store storage.Storage, cfg *config.Config) *URLService {
 //
 // Функция использует crypto/rand для генерации случайных байтов,
 // которые затем преобразуются в строку из алфавитно-цифровых символов.
-// В случае ошибки crypto/rand используется fallback на math/rand.
+// Если crypto/rand недоступен, возвращается ошибка.
 //
-// Возвращает строку длиной 8 символов, содержащую буквы и цифры.
-func (s *URLService) GenerateID() string {
+// Возвращает:
+//   - string: строка длиной 8 символов, содержащая буквы и цифры
+//   - error: ошибка, если генерация случайных байтов не удалась
+func (s *URLService) GenerateID() (string, error) {
 	const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	result := make([]byte, 8)
 	randomBytes := make([]byte, 8)
 
 	// Используем crypto/rand для безопасной генерации
 	if _, err := cryptoRand.Read(randomBytes); err != nil {
-		// Fallback на менее безопасный вариант в случае ошибки
-		for i := range result {
-			result[i] = chars[mathRand.Intn(len(chars))]
-		}
-		return string(result)
+		return "", fmt.Errorf("ошибка генерации случайных байтов: %w", err)
 	}
 
 	for i := range result {
 		result[i] = chars[int(randomBytes[i])%len(chars)]
 	}
-	return string(result)
+	return string(result), nil
 }
 
 // ShortenURL создает сокращенный URL для переданного оригинального URL.
@@ -113,11 +110,15 @@ func (s *URLService) ShortenURL(ctx context.Context, originalURL, userID string)
 		return "", 400, fmt.Errorf("URL не может быть пустым")
 	}
 
-	id := s.GenerateID()
+	id, err := s.GenerateID()
+	if err != nil {
+		return "", 500, fmt.Errorf("ошибка генерации ID: %w", err)
+	}
+
 	shortURL := fmt.Sprintf("%s/%s", s.config.BaseURL, id)
 
 	// Сохраняем в хранилище с user_id
-	err := s.storage.SaveURLWithUser(ctx, id, originalURL, userID)
+	err = s.storage.SaveURLWithUser(ctx, id, originalURL, userID)
 	if err != nil {
 		// Проверяем, является ли ошибка конфликтом
 		var conflictErr *storage.ErrConflict
@@ -223,4 +224,18 @@ func (s *URLService) Shutdown() {
 	s.cancel()
 	s.wg.Wait()
 	close(s.deleteChan)
+}
+
+// SaveBatchWithUser сохраняет множество URL с привязкой к пользователю.
+//
+// Функция делегирует операцию сохранения хранилищу.
+//
+// Параметры:
+//   - ctx: контекст выполнения операции
+//   - items: список элементов для сохранения
+//   - userID: идентификатор пользователя
+//
+// Возвращает ошибку, если сохранение не удалось.
+func (s *URLService) SaveBatchWithUser(ctx context.Context, items []storage.BatchItem, userID string) error {
+	return s.storage.SaveBatchWithUser(ctx, items, userID)
 }

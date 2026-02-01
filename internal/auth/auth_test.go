@@ -6,8 +6,10 @@ import (
 )
 
 func TestGenerateUserID(t *testing.T) {
-	id1 := GenerateUserID()
-	id2 := GenerateUserID()
+	authService := NewAuthService()
+
+	id1 := authService.GenerateUserID()
+	id2 := authService.GenerateUserID()
 
 	if id1 == "" {
 		t.Error("ID не должен быть пустым")
@@ -19,13 +21,14 @@ func TestGenerateUserID(t *testing.T) {
 }
 
 func TestSignAndVerifyValue(t *testing.T) {
+	authService := NewAuthService()
 	value := "test-user-id"
 
 	// Подписываем значение
-	signed := SignValue(value)
+	signed := authService.SignValue(value)
 
 	// Проверяем подпись
-	verified, valid := VerifySignedValue(signed)
+	verified, valid := authService.VerifySignedValue(signed)
 
 	if !valid {
 		t.Error("Подпись должна быть валидной")
@@ -37,33 +40,36 @@ func TestSignAndVerifyValue(t *testing.T) {
 }
 
 func TestVerifySignedValue_Invalid(t *testing.T) {
+	authService := NewAuthService()
+
 	// Невалидная подпись
-	_, valid := VerifySignedValue("invalid.signature")
+	_, valid := authService.VerifySignedValue("invalid.signature")
 	if valid {
 		t.Error("Невалидная подпись не должна проходить проверку")
 	}
 
 	// Подделанная подпись
-	_, valid = VerifySignedValue("test-id.fakesignature")
+	_, valid = authService.VerifySignedValue("test-id.fakesignature")
 	if valid {
 		t.Error("Подделанная подпись не должна проходить проверку")
 	}
 
 	// Неправильный формат
-	_, valid = VerifySignedValue("no-dot-separator")
+	_, valid = authService.VerifySignedValue("no-dot-separator")
 	if valid {
 		t.Error("Неправильный формат не должен проходить проверку")
 	}
 }
 
 func TestSetAndGetUserID(t *testing.T) {
+	authService := NewAuthService()
 	userID := "test-user-123"
 
 	// Создаем тестовый запрос и ответ
 	w := httptest.NewRecorder()
 
 	// Устанавливаем куку
-	SetUserID(w, userID)
+	authService.SetUserID(w, userID)
 
 	// Получаем куку из ответа
 	result := w.Result()
@@ -94,7 +100,7 @@ func TestSetAndGetUserID(t *testing.T) {
 	req.AddCookie(cookie)
 
 	// Получаем ID из куки
-	retrievedID, err := GetUserID(req)
+	retrievedID, err := authService.GetUserID(req)
 	if err != nil {
 		t.Fatalf("Ошибка получения ID: %v", err)
 	}
@@ -105,20 +111,22 @@ func TestSetAndGetUserID(t *testing.T) {
 }
 
 func TestGetUserID_NoCookie(t *testing.T) {
+	authService := NewAuthService()
 	req := httptest.NewRequest("GET", "/", nil)
 
-	_, err := GetUserID(req)
+	_, err := authService.GetUserID(req)
 	if err == nil {
 		t.Error("Должна быть ошибка при отсутствии куки")
 	}
 }
 
 func TestGetOrCreateUserID_NewUser(t *testing.T) {
+	authService := NewAuthService()
 	req := httptest.NewRequest("GET", "/", nil)
 	w := httptest.NewRecorder()
 
 	// Получаем или создаем ID
-	userID := GetOrCreateUserID(w, req)
+	userID := authService.GetOrCreateUserID(w, req)
 
 	if userID == "" {
 		t.Error("ID не должен быть пустым")
@@ -134,10 +142,12 @@ func TestGetOrCreateUserID_NewUser(t *testing.T) {
 }
 
 func TestGetOrCreateUserID_ExistingUser(t *testing.T) {
+	authService := NewAuthService()
+
 	// Создаем пользователя
 	userID := "existing-user-123"
 	w1 := httptest.NewRecorder()
-	SetUserID(w1, userID)
+	authService.SetUserID(w1, userID)
 	result := w1.Result()
 	defer result.Body.Close()
 	cookie := result.Cookies()[0]
@@ -148,7 +158,7 @@ func TestGetOrCreateUserID_ExistingUser(t *testing.T) {
 	w2 := httptest.NewRecorder()
 
 	// Получаем ID
-	retrievedID := GetOrCreateUserID(w2, req)
+	retrievedID := authService.GetOrCreateUserID(w2, req)
 
 	if retrievedID != userID {
 		t.Errorf("Ожидали '%s', получили '%s'", userID, retrievedID)

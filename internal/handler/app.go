@@ -32,7 +32,7 @@ import (
 type App struct {
 	config       *config.Config        // конфигурация приложения
 	urlService   *service.URLService   // сервис для работы с URL
-	storage      storage.Storage       // хранилище (для обратной совместимости с тестами)
+	authService  *auth.AuthService     // сервис аутентификации
 	auditService *service.AuditService // сервис аудита
 }
 
@@ -50,7 +50,7 @@ func NewApp(cfg *config.Config, store storage.Storage) *App {
 	app := &App{
 		config:       cfg,
 		urlService:   service.NewURLService(store, cfg),
-		storage:      store,
+		authService:  auth.NewAuthService(),
 		auditService: service.NewAuditService(),
 	}
 
@@ -150,7 +150,7 @@ func (app *App) auditFollow(userID, originalURL string) {
 // shortenURL общая логика для сокращения URL
 func (app *App) shortenURL(ctx context.Context, w http.ResponseWriter, r *http.Request, originalURL string) (string, int, error) {
 	// Получаем или создаем ID пользователя
-	userID := auth.GetOrCreateUserID(w, r)
+	userID := app.authService.GetOrCreateUserID(w, r)
 
 	// Используем service для бизнес-логики
 	shortURL, statusCode, err := app.urlService.ShortenURL(ctx, originalURL, userID)
@@ -298,6 +298,9 @@ func (app *App) CreateShortURLBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Получаем или создаем ID пользователя
+	userID := app.authService.GetOrCreateUserID(w, r)
+
 	// Подготавливаем данные для сохранения
 	batchItems := make([]storage.BatchItem, 0, len(requests))
 	responses := make([]BatchShortenResponse, 0, len(requests))
@@ -310,7 +313,12 @@ func (app *App) CreateShortURLBatch(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Генерируем ID через service
-		id := app.urlService.GenerateID()
+		id, err := app.urlService.GenerateID()
+		if err != nil {
+			log.Printf("Ошибка генерации ID: %v", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
 		shortURL := fmt.Sprintf("%s/%s", app.config.BaseURL, id)
 
 		batchItems = append(batchItems, storage.BatchItem{
@@ -325,11 +333,8 @@ func (app *App) CreateShortURLBatch(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	// Получаем или создаем ID пользователя
-	userID := auth.GetOrCreateUserID(w, r)
-
-	// Сохраняем все URL в хранилище с user_id
-	if err := app.storage.SaveBatchWithUser(r.Context(), batchItems, userID); err != nil {
+	// Сохраняем все URL в хранилище с user_id через urlService
+	if err := app.urlService.SaveBatchWithUser(r.Context(), batchItems, userID); err != nil {
 		log.Printf("Ошибка сохранения batch в хранилище: %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
@@ -374,7 +379,7 @@ func (app *App) RedirectToOriginal(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Аудит успешного перехода
-	userID := auth.GetOrCreateUserID(w, r)
+	userID := app.authService.GetOrCreateUserID(w, r)
 	app.auditFollow(userID, originalURL)
 
 	w.Header().Set("Location", originalURL)
@@ -397,7 +402,7 @@ func (app *App) RedirectToOriginal(w http.ResponseWriter, r *http.Request) {
 //   - 500 Internal Server Error: ошибка получения данных
 func (app *App) GetUserURLs(w http.ResponseWriter, r *http.Request) {
 	// Получаем или создаем ID пользователя
-	userID := auth.GetOrCreateUserID(w, r)
+	userID := app.authService.GetOrCreateUserID(w, r)
 
 	// Используем service для получения URL
 	records, err := app.urlService.GetUserURLs(r.Context(), userID)
@@ -438,7 +443,7 @@ func (app *App) GetUserURLs(w http.ResponseWriter, r *http.Request) {
 //   - 400 Bad Request: некорректный JSON или пустой массив
 func (app *App) DeleteUserURLs(w http.ResponseWriter, r *http.Request) {
 	// Получаем ID пользователя
-	userID := auth.GetOrCreateUserID(w, r)
+	userID := app.authService.GetOrCreateUserID(w, r)
 
 	// Декодируем список ID для удаления
 	var shortIDs []string

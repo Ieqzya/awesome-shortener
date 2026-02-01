@@ -35,14 +35,30 @@ const (
 	defaultSecretKey = "default-secret-key-please-change"
 )
 
-var secretKey string
+// AuthService предоставляет функциональность аутентификации с dependency injection.
+//
+// Сервис инкапсулирует секретный ключ и предоставляет методы для работы
+// с подписанными cookie и идентификаторами пользователей.
+type AuthService struct {
+	secretKey string // секретный ключ для подписи cookie
+}
 
-func init() {
-	// Получаем секретный ключ из переменной окружения
-	secretKey = os.Getenv("SECRET_KEY")
+// NewAuthService создает новый экземпляр AuthService.
+//
+// Функция получает секретный ключ из переменной окружения SECRET_KEY.
+// Если переменная не установлена, используется значение по умолчанию
+// с предупреждением в логах.
+//
+// Возвращает настроенный AuthService.
+func NewAuthService() *AuthService {
+	secretKey := os.Getenv("SECRET_KEY")
 	if secretKey == "" {
 		secretKey = defaultSecretKey
 		log.Println("WARNING: Using default secret key. Set SECRET_KEY environment variable for production!")
+	}
+
+	return &AuthService{
+		secretKey: secretKey,
 	}
 }
 
@@ -52,22 +68,21 @@ func init() {
 // уникального идентификатора.
 //
 // Возвращает строковое представление UUID.
-func GenerateUserID() string {
+func (as *AuthService) GenerateUserID() string {
 	return uuid.New().String()
 }
 
 // SignValue подписывает значение с помощью HMAC-SHA256.
 //
 // Функция создает подпись для переданного значения, используя
-// секретный ключ из переменной окружения SECRET_KEY.
-// Подпись добавляется к значению через точку.
+// секретный ключ сервиса. Подпись добавляется к значению через точку.
 //
 // Параметры:
 //   - value: значение для подписи
 //
 // Возвращает подписанное значение в формате "value.signature".
-func SignValue(value string) string {
-	h := hmac.New(sha256.New, []byte(secretKey))
+func (as *AuthService) SignValue(value string) string {
+	h := hmac.New(sha256.New, []byte(as.secretKey))
 	h.Write([]byte(value))
 	signature := hex.EncodeToString(h.Sum(nil))
 	return fmt.Sprintf("%s.%s", value, signature)
@@ -84,7 +99,7 @@ func SignValue(value string) string {
 // Возвращает:
 //   - string: оригинальное значение (если подпись верна)
 //   - bool: true, если подпись корректна
-func VerifySignedValue(signedValue string) (string, bool) {
+func (as *AuthService) VerifySignedValue(signedValue string) (string, bool) {
 	parts := strings.Split(signedValue, ".")
 	if len(parts) != 2 {
 		return "", false
@@ -94,7 +109,7 @@ func VerifySignedValue(signedValue string) (string, bool) {
 	signature := parts[1]
 
 	// Вычисляем ожидаемую подпись
-	h := hmac.New(sha256.New, []byte(secretKey))
+	h := hmac.New(sha256.New, []byte(as.secretKey))
 	h.Write([]byte(value))
 	expectedSignature := hex.EncodeToString(h.Sum(nil))
 
@@ -117,13 +132,13 @@ func VerifySignedValue(signedValue string) (string, bool) {
 // Возвращает:
 //   - string: идентификатор пользователя
 //   - error: ошибка, если cookie отсутствует или подпись неверна
-func GetUserID(r *http.Request) (string, error) {
+func (as *AuthService) GetUserID(r *http.Request) (string, error) {
 	cookie, err := r.Cookie(cookieName)
 	if err != nil {
 		return "", err
 	}
 
-	userID, valid := VerifySignedValue(cookie.Value)
+	userID, valid := as.VerifySignedValue(cookie.Value)
 	if !valid {
 		return "", fmt.Errorf("invalid cookie signature")
 	}
@@ -140,8 +155,8 @@ func GetUserID(r *http.Request) (string, error) {
 // Параметры:
 //   - w: HTTP ответ
 //   - userID: идентификатор пользователя для сохранения
-func SetUserID(w http.ResponseWriter, userID string) {
-	signedValue := SignValue(userID)
+func (as *AuthService) SetUserID(w http.ResponseWriter, userID string) {
+	signedValue := as.SignValue(userID)
 	cookie := &http.Cookie{
 		Name:     cookieName,
 		Value:    signedValue,
@@ -163,12 +178,12 @@ func SetUserID(w http.ResponseWriter, userID string) {
 //   - r: HTTP запрос (для чтения существующей cookie)
 //
 // Возвращает идентификатор пользователя (существующий или новый).
-func GetOrCreateUserID(w http.ResponseWriter, r *http.Request) string {
-	userID, err := GetUserID(r)
+func (as *AuthService) GetOrCreateUserID(w http.ResponseWriter, r *http.Request) string {
+	userID, err := as.GetUserID(r)
 	if err != nil || userID == "" {
 		// Создаем новый ID
-		userID = GenerateUserID()
-		SetUserID(w, userID)
+		userID = as.GenerateUserID()
+		as.SetUserID(w, userID)
 	}
 	return userID
 }
