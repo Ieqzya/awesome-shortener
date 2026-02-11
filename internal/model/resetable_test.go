@@ -117,10 +117,10 @@ func TestSimpleStruct_Reset_Nil(t *testing.T) {
 // Бенчмарк для проверки производительности Reset
 func BenchmarkResetableStruct_Reset(b *testing.B) {
 	rs := &ResetableStruct{
-		I:    100,
-		Str:  "hello",
-		S:    make([]int, 0, 100),
-		M:    make(map[string]string),
+		I:     100,
+		Str:   "hello",
+		S:     make([]int, 0, 100),
+		M:     make(map[string]string),
 		Child: &ResetableStruct{},
 	}
 

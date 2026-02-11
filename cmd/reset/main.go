@@ -57,10 +57,10 @@ import (
 
 // StructInfo содержит информацию о структуре для генерации
 type StructInfo struct {
-	Name       string      // имя структуры
-	RecvName   string      // имя receiver'а (первая буква имени структуры в нижнем регистре)
-	Fields     []FieldInfo // поля структуры
-	PackageName string     // имя пакета
+	Name        string      // имя структуры
+	RecvName    string      // имя receiver'а (первая буква имени структуры в нижнем регистре)
+	Fields      []FieldInfo // поля структуры
+	PackageName string      // имя пакета
 }
 
 // FieldInfo содержит информацию о поле структуры

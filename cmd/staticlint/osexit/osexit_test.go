@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"awesome-shortener/cmd/staticlint/osexit"
+
 	"golang.org/x/tools/go/analysis/analysistest"
 )
 
