@@ -49,7 +49,6 @@ import (
 	"go/format"
 	"go/parser"
 	"go/token"
-	"go/types"
 	"log"
 	"os"
 	"path/filepath"
