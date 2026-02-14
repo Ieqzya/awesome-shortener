@@ -31,6 +31,65 @@ git fetch template && git checkout template/v2 .github
 
 Подробнее про локальный и автоматический запуск читайте в [README автотестов](https://github.com/Yandex-Practicum/go-autotests).
 
+## Анализ производительности
+
+### Бенчмарки
+
+Проект включает бенчмарки для измерения производительности ключевых компонентов:
+
+```bash
+# Запуск всех бенчмарков
+go test -bench=. -benchmem ./...
+
+# Бенчмарки для конкретных компонентов
+go test -bench=BenchmarkStringConcatenation -benchmem ./cmd/shortener/
+go test -bench=BenchmarkMemoryStorage -benchmem ./internal/storage/
+go test -bench=BenchmarkURLService -benchmem ./internal/service/
+```
+
+### Результаты оптимизации строковых операций
+
+Сравнение различных методов конкатенации строк:
+
+| Метод | Время (ns/op) | Память (B/op) | Аллокации (allocs/op) |
+|-------|---------------|---------------|----------------------|
+| fmt.Sprintf | 48.41 | 40 | 2 |
+| string concatenation | **19.76** | **7** | **0** |
+| strings.Builder | 32.91 | 55 | 3 |
+
+**Вывод**: Простая конкатенация строк в 2.4 раза быстрее fmt.Sprintf и не создает дополнительных аллокаций.
+
+### Профилирование памяти
+
+Анализ использования памяти с помощью pprof показал следующие оптимизации:
+
+```
+go tool pprof -top -diff_base=profiles/base_mem.pprof profiles/result_mem.pprof
+```
+
+**Результаты оптимизации:**
+- **fmt.Sprintf: -512.02kB** (уменьшение на 9.68%)
+- **compress/gzip.NewWriterLevel: -512.08kB** (уменьшение на 9.69%)  
+- **runtime.allocm: -513kB** (уменьшение на 9.70%)
+
+**Основные оптимизации:**
+1. Замена `fmt.Sprintf` на прямую конкатенацию строк для простых случаев
+2. Использование пула `strings.Builder` для переиспользования буферов
+3. Оптимизация создания JSON строк без лишних аллокаций
+
+### Запуск профилирования
+
+```bash
+# Создание базового профиля
+go run profile_memory.go base
+
+# Создание оптимизированного профиля  
+go run profile_memory_optimized.go result
+
+# Сравнение профилей
+go tool pprof -top -diff_base=profiles/base_mem.pprof profiles/result_mem.pprof
+```
+
 ## Структура проекта
 
 Приведённая в этом репозитории структура проекта является рекомендуемой, но не обязательной.
