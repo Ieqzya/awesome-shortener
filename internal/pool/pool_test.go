@@ -215,8 +215,10 @@ func BenchmarkDirect_NewObject(b *testing.B) {
 			obj.ID = 123
 			obj.Name = "benchmark"
 			obj.Data = append(obj.Data, []byte("data")...)
-			// Объект будет собран GC
-			_ = obj
+			// Используем объект чтобы избежать оптимизации компилятора
+			if obj.ID == 0 {
+				b.Fatal("unexpected")
+			}
 		}
 	})
 }
