@@ -66,6 +66,39 @@ func (m *MyStruct) Reset() {
 
 **Документация:** [cmd/reset/README.md](cmd/reset/README.md)
 
+### 3. Pool - Типобезопасный пул объектов
+
+Generic пул объектов для эффективного переиспользования структур с методом Reset().
+
+**Расположение:** `internal/pool/`
+
+**Использование:**
+```go
+import "awesome-shortener/internal/pool"
+
+// Создаем пул для структур с методом Reset()
+p := pool.New(func() *MyStruct {
+    return &MyStruct{
+        Buffer: make([]byte, 0, 1024),
+    }
+})
+
+// Получаем объект из пула
+obj := p.Get()
+defer p.Put(obj) // Автоматически вызовет Reset()
+
+// Используем объект
+obj.ID = 123
+```
+
+**Преимущества:**
+- Снижение нагрузки на GC (~194x быстрее создания новых объектов)
+- Типобезопасность на уровне компиляции (generics)
+- Автоматический вызов Reset() перед возвратом в пул
+- Потокобезопасность
+
+**Документация:** [internal/pool/README.md](internal/pool/README.md)
+
 ## Архитектурные улучшения
 
 ### Dependency Injection
