@@ -122,19 +122,7 @@ func NewConfig() (*Config, error) {
 		}
 	}
 
-	// 4. Переопределяем флагами (если они были явно указаны)
-	// Проверяем, были ли флаги установлены явно
-	flagsSet := make(map[string]bool)
-	flag.Visit(func(f *flag.Flag) {
-		flagsSet[f.Name] = true
-	})
-
-	// Применяем флаги только если они были явно установлены
-	if !flagsSet["a"] {
-		// Флаг не был установлен, значение из JSON или дефолт уже применено
-	}
-
-	// 5. Переопределяем переменными окружения (наивысший приоритет)
+	// 4. Переопределяем переменными окружения (наивысший приоритет)
 	if envServerAddr := strings.TrimSpace(os.Getenv("SERVER_ADDRESS")); envServerAddr != "" {
 		cfg.ServerAddress = envServerAddr
 	}
