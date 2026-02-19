@@ -1,10 +1,11 @@
 // Package config предоставляет функциональность для управления конфигурацией сервиса сокращения URL.
 //
-// Пакет поддерживает конфигурацию через флаги командной строки и переменные окружения
-// с правильным приоритетом: переменные окружения > флаги > значения по умолчанию.
+// Пакет поддерживает конфигурацию через JSON файл, флаги командной строки и переменные окружения
+// с правильным приоритетом: переменные окружения > флаги > JSON файл > значения по умолчанию.
 package config
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"net/url"
@@ -27,8 +28,8 @@ const DefaultDatabaseDSN = ""
 
 // Config содержит конфигурацию сервиса сокращения URL.
 //
-// Структура поддерживает настройку через флаги командной строки и переменные окружения.
-// Приоритет параметров: переменные окружения > флаги > значения по умолчанию.
+// Структура поддерживает настройку через JSON файл, флаги командной строки и переменные окружения.
+// Приоритет параметров: переменные окружения > флаги > JSON файл > значения по умолчанию.
 //
 // Пример использования:
 //
@@ -38,19 +39,31 @@ const DefaultDatabaseDSN = ""
 //	}
 //	fmt.Printf("Server will start on %s\n", cfg.ServerAddress)
 type Config struct {
-	ServerAddress   string // адрес запуска HTTP-сервера (флаг -a, переменная SERVER_ADDRESS)
-	BaseURL         string // базовый адрес результирующего сокращённого URL (флаг -b, переменная BASE_URL)
-	FileStoragePath string // путь до файла с данными (флаг -f, переменная FILE_STORAGE_PATH)
-	DatabaseDSN     string // строка подключения к базе данных (флаг -d, переменная DATABASE_DSN)
-	AuditFile       string // путь к файлу аудита (флаг --audit-file, переменная AUDIT_FILE)
-	AuditURL        string // URL удаленного сервера аудита (флаг --audit-url, переменная AUDIT_URL)
-	EnableHTTPS     bool   // включить HTTPS (флаг -s, переменная ENABLE_HTTPS)
+	ServerAddress   string `json:"server_address"`    // адрес запуска HTTP-сервера
+	BaseURL         string `json:"base_url"`          // базовый адрес результирующего сокращённого URL
+	FileStoragePath string `json:"file_storage_path"` // путь до файла с данными
+	DatabaseDSN     string `json:"database_dsn"`      // строка подключения к базе данных
+	AuditFile       string `json:"audit_file"`        // путь к файлу аудита
+	AuditURL        string `json:"audit_url"`         // URL удаленного сервера аудита
+	EnableHTTPS     bool   `json:"enable_https"`      // включить HTTPS
+}
+
+// JSONConfig представляет структуру JSON файла конфигурации с опциональными полями
+type JSONConfig struct {
+	ServerAddress   *string `json:"server_address,omitempty"`
+	BaseURL         *string `json:"base_url,omitempty"`
+	FileStoragePath *string `json:"file_storage_path,omitempty"`
+	DatabaseDSN     *string `json:"database_dsn,omitempty"`
+	AuditFile       *string `json:"audit_file,omitempty"`
+	AuditURL        *string `json:"audit_url,omitempty"`
+	EnableHTTPS     *bool   `json:"enable_https,omitempty"`
 }
 
 // NewConfig создает и инициализирует конфигурацию с приоритетом:
 // 1. Переменные окружения (наивысший приоритет)
 // 2. Флаги командной строки
-// 3. Значения по умолчанию (наименьший приоритет)
+// 3. JSON файл конфигурации
+// 4. Значения по умолчанию (наименьший приоритет)
 //
 // Поддерживаемые флаги:
 //
@@ -59,6 +72,7 @@ type Config struct {
 //	-f: путь до файла с данными
 //	-d: строка подключения к базе данных
 //	-s: включить HTTPS
+//	-c/-config: путь к JSON файлу конфигурации
 //	--audit-file: путь к файлу аудита
 //	--audit-url: URL удаленного сервера аудита
 //
@@ -69,6 +83,7 @@ type Config struct {
 //	FILE_STORAGE_PATH: путь до файла с данными
 //	DATABASE_DSN: строка подключения к базе данных
 //	ENABLE_HTTPS: включить HTTPS (true/false)
+//	CONFIG: путь к JSON файлу конфигурации
 //	AUDIT_FILE: путь к файлу аудита
 //	AUDIT_URL: URL удаленного сервера аудита
 //
@@ -76,13 +91,16 @@ type Config struct {
 func NewConfig() (*Config, error) {
 	cfg := &Config{}
 
-	// Устанавливаем значения по умолчанию
+	// 1. Устанавливаем значения по умолчанию
 	cfg.ServerAddress = DefaultServerAddress
 	cfg.BaseURL = DefaultBaseURL
 	cfg.FileStoragePath = DefaultFileStoragePath
 	cfg.DatabaseDSN = DefaultDatabaseDSN
 
-	// Парсим флаги командной строки
+	// 2. Парсим флаги командной строки
+	var configFile string
+	flag.StringVar(&configFile, "c", "", "путь к JSON файлу конфигурации")
+	flag.StringVar(&configFile, "config", "", "путь к JSON файлу конфигурации")
 	flag.StringVar(&cfg.ServerAddress, "a", cfg.ServerAddress, "адрес запуска HTTP-сервера")
 	flag.StringVar(&cfg.BaseURL, "b", cfg.BaseURL, "базовый адрес результирующего сокращённого URL")
 	flag.StringVar(&cfg.FileStoragePath, "f", cfg.FileStoragePath, "путь до файла с данными")
@@ -92,7 +110,31 @@ func NewConfig() (*Config, error) {
 	flag.StringVar(&cfg.AuditURL, "audit-url", cfg.AuditURL, "URL удаленного сервера аудита")
 	flag.Parse()
 
-	// Переопределяем переменными окружения (наивысший приоритет)
+	// Проверяем переменную окружения для пути к конфигу
+	if envConfigFile := strings.TrimSpace(os.Getenv("CONFIG")); envConfigFile != "" {
+		configFile = envConfigFile
+	}
+
+	// 3. Загружаем конфигурацию из JSON файла (если указан)
+	if configFile != "" {
+		if err := loadJSONConfig(configFile, cfg); err != nil {
+			return nil, fmt.Errorf("ошибка загрузки конфигурации из файла: %w", err)
+		}
+	}
+
+	// 4. Переопределяем флагами (если они были явно указаны)
+	// Проверяем, были ли флаги установлены явно
+	flagsSet := make(map[string]bool)
+	flag.Visit(func(f *flag.Flag) {
+		flagsSet[f.Name] = true
+	})
+
+	// Применяем флаги только если они были явно установлены
+	if !flagsSet["a"] {
+		// Флаг не был установлен, значение из JSON или дефолт уже применено
+	}
+
+	// 5. Переопределяем переменными окружения (наивысший приоритет)
 	if envServerAddr := strings.TrimSpace(os.Getenv("SERVER_ADDRESS")); envServerAddr != "" {
 		cfg.ServerAddress = envServerAddr
 	}
@@ -127,6 +169,44 @@ func NewConfig() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// loadJSONConfig загружает конфигурацию из JSON файла
+func loadJSONConfig(filename string, cfg *Config) error {
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return fmt.Errorf("не удалось прочитать файл: %w", err)
+	}
+
+	var jsonCfg JSONConfig
+	if err := json.Unmarshal(data, &jsonCfg); err != nil {
+		return fmt.Errorf("не удалось распарсить JSON: %w", err)
+	}
+
+	// Применяем значения из JSON только если они указаны
+	if jsonCfg.ServerAddress != nil {
+		cfg.ServerAddress = *jsonCfg.ServerAddress
+	}
+	if jsonCfg.BaseURL != nil {
+		cfg.BaseURL = *jsonCfg.BaseURL
+	}
+	if jsonCfg.FileStoragePath != nil {
+		cfg.FileStoragePath = *jsonCfg.FileStoragePath
+	}
+	if jsonCfg.DatabaseDSN != nil {
+		cfg.DatabaseDSN = *jsonCfg.DatabaseDSN
+	}
+	if jsonCfg.AuditFile != nil {
+		cfg.AuditFile = *jsonCfg.AuditFile
+	}
+	if jsonCfg.AuditURL != nil {
+		cfg.AuditURL = *jsonCfg.AuditURL
+	}
+	if jsonCfg.EnableHTTPS != nil {
+		cfg.EnableHTTPS = *jsonCfg.EnableHTTPS
+	}
+
+	return nil
 }
 
 // validate проверяет корректность конфигурации

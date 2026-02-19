@@ -191,3 +191,200 @@ func TestEnableHTTPS(t *testing.T) {
 		})
 	}
 }
+
+func TestJSONConfig(t *testing.T) {
+	// Создаем временный JSON файл
+	tmpFile, err := os.CreateTemp("", "config-*.json")
+	if err != nil {
+		t.Fatalf("Не удалось создать временный файл: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	// Записываем тестовую конфигурацию
+	jsonData := `{
+		"server_address": "localhost:9090",
+		"base_url": "http://example.com",
+		"file_storage_path": "/custom/path.json",
+		"database_dsn": "postgres://localhost/test",
+		"enable_https": true
+	}`
+	if _, err := tmpFile.WriteString(jsonData); err != nil {
+		t.Fatalf("Не удалось записать в файл: %v", err)
+	}
+	tmpFile.Close()
+
+	// Сохраняем оригинальные значения
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+
+	// Сбрасываем флаги
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+
+	// Устанавливаем путь к конфигу через флаг
+	os.Args = []string{"cmd", "-c", tmpFile.Name()}
+
+	cfg, err := NewConfig()
+	if err != nil {
+		t.Fatalf("Неожиданная ошибка: %v", err)
+	}
+
+	// Проверяем значения из JSON
+	if cfg.ServerAddress != "localhost:9090" {
+		t.Errorf("Ожидали ServerAddress='localhost:9090', получили '%s'", cfg.ServerAddress)
+	}
+	if cfg.BaseURL != "http://example.com" {
+		t.Errorf("Ожидали BaseURL='http://example.com', получили '%s'", cfg.BaseURL)
+	}
+	if cfg.FileStoragePath != "/custom/path.json" {
+		t.Errorf("Ожидали FileStoragePath='/custom/path.json', получили '%s'", cfg.FileStoragePath)
+	}
+	if cfg.DatabaseDSN != "postgres://localhost/test" {
+		t.Errorf("Ожидали DatabaseDSN='postgres://localhost/test', получили '%s'", cfg.DatabaseDSN)
+	}
+	if !cfg.EnableHTTPS {
+		t.Error("Ожидали EnableHTTPS=true, получили false")
+	}
+}
+
+func TestConfigPriority(t *testing.T) {
+	// Создаем временный JSON файл
+	tmpFile, err := os.CreateTemp("", "config-*.json")
+	if err != nil {
+		t.Fatalf("Не удалось создать временный файл: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	// JSON конфигурация
+	jsonData := `{
+		"server_address": "localhost:9090",
+		"base_url": "http://json.com"
+	}`
+	if _, err := tmpFile.WriteString(jsonData); err != nil {
+		t.Fatalf("Не удалось записать в файл: %v", err)
+	}
+	tmpFile.Close()
+
+	// Сохраняем оригинальные значения
+	oldArgs := os.Args
+	oldEnv := os.Getenv("SERVER_ADDRESS")
+	defer func() {
+		os.Args = oldArgs
+		if oldEnv != "" {
+			os.Setenv("SERVER_ADDRESS", oldEnv)
+		} else {
+			os.Unsetenv("SERVER_ADDRESS")
+		}
+	}()
+
+	// Сбрасываем флаги
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+
+	// Устанавливаем переменную окружения (наивысший приоритет)
+	os.Setenv("SERVER_ADDRESS", "localhost:7777")
+
+	// Устанавливаем флаг и путь к конфигу
+	os.Args = []string{"cmd", "-c", tmpFile.Name(), "-a", "localhost:8888"}
+
+	cfg, err := NewConfig()
+	if err != nil {
+		t.Fatalf("Неожиданная ошибка: %v", err)
+	}
+
+	// Переменная окружения должна иметь наивысший приоритет
+	if cfg.ServerAddress != "localhost:7777" {
+		t.Errorf("Ожидали ServerAddress='localhost:7777' (из env), получили '%s'", cfg.ServerAddress)
+	}
+
+	// BaseURL должен быть из JSON (нет флага и env)
+	if cfg.BaseURL != "http://json.com" {
+		t.Errorf("Ожидали BaseURL='http://json.com' (из JSON), получили '%s'", cfg.BaseURL)
+	}
+}
+
+func TestJSONConfigWithEnv(t *testing.T) {
+	// Создаем временный JSON файл
+	tmpFile, err := os.CreateTemp("", "config-*.json")
+	if err != nil {
+		t.Fatalf("Не удалось создать временный файл: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	jsonData := `{"server_address": "localhost:9090"}`
+	if _, err := tmpFile.WriteString(jsonData); err != nil {
+		t.Fatalf("Не удалось записать в файл: %v", err)
+	}
+	tmpFile.Close()
+
+	// Сохраняем оригинальные значения
+	oldArgs := os.Args
+	oldConfigEnv := os.Getenv("CONFIG")
+	defer func() {
+		os.Args = oldArgs
+		if oldConfigEnv != "" {
+			os.Setenv("CONFIG", oldConfigEnv)
+		} else {
+			os.Unsetenv("CONFIG")
+		}
+	}()
+
+	// Сбрасываем флаги
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+
+	// Устанавливаем путь к конфигу через переменную окружения
+	os.Setenv("CONFIG", tmpFile.Name())
+	os.Args = []string{"cmd"}
+
+	cfg, err := NewConfig()
+	if err != nil {
+		t.Fatalf("Неожиданная ошибка: %v", err)
+	}
+
+	if cfg.ServerAddress != "localhost:9090" {
+		t.Errorf("Ожидали ServerAddress='localhost:9090', получили '%s'", cfg.ServerAddress)
+	}
+}
+
+func TestInvalidJSONConfig(t *testing.T) {
+	// Создаем временный файл с невалидным JSON
+	tmpFile, err := os.CreateTemp("", "config-*.json")
+	if err != nil {
+		t.Fatalf("Не удалось создать временный файл: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	// Невалидный JSON
+	if _, err := tmpFile.WriteString("{invalid json}"); err != nil {
+		t.Fatalf("Не удалось записать в файл: %v", err)
+	}
+	tmpFile.Close()
+
+	// Сохраняем оригинальные значения
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+
+	// Сбрасываем флаги
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+
+	os.Args = []string{"cmd", "-c", tmpFile.Name()}
+
+	_, err = NewConfig()
+	if err == nil {
+		t.Error("Ожидали ошибку при невалидном JSON, но получили nil")
+	}
+}
+
+func TestNonExistentJSONConfig(t *testing.T) {
+	// Сохраняем оригинальные значения
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+
+	// Сбрасываем флаги
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+
+	os.Args = []string{"cmd", "-c", "/nonexistent/config.json"}
+
+	_, err := NewConfig()
+	if err == nil {
+		t.Error("Ожидали ошибку при несуществующем файле, но получили nil")
+	}
+}

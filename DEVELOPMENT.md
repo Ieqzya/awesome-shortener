@@ -202,6 +202,40 @@ ENABLE_HTTPS=true ./shortener
 - Файлы `cert.pem` и `key.pem` должны находиться в `cmd/shortener/`
 - Для production используйте сертификаты от доверенного CA
 
+### JSON конфигурация
+
+Приложение поддерживает конфигурацию через JSON файл с приоритетом:
+**Переменные окружения > Флаги > JSON файл > Значения по умолчанию**
+
+**Формат файла:**
+```json
+{
+    "server_address": "localhost:8080",
+    "base_url": "http://localhost:8080",
+    "file_storage_path": "/tmp/short-url-db.json",
+    "database_dsn": "",
+    "enable_https": false
+}
+```
+
+**Использование:**
+```bash
+# Через флаг
+./shortener -c config.json
+./shortener -config config.json
+
+# Через переменную окружения
+CONFIG=config.json ./shortener
+
+# Комбинация с другими параметрами
+./shortener -c config.json -a localhost:9090
+DATABASE_DSN="postgres://..." ./shortener -c config.json
+```
+
+**Примеры конфигураций:**
+- `config.json.example` - пример базовой конфигурации
+- См. [CONFIG.md](CONFIG.md) для подробной документации
+
 ## Workflow разработки
 
 ### 1. Добавление новой структуры с Reset

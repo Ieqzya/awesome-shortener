@@ -135,3 +135,96 @@ curl -k -X POST https://localhost:8080/ \
 ```
 Сервер запущен на localhost:8080 (HTTPS)
 ```
+
+## Конфигурация через JSON
+
+Приложение поддерживает конфигурацию через JSON файл.
+
+### Формат файла
+
+Создайте файл `config.json`:
+
+```json
+{
+    "server_address": "localhost:8080",
+    "base_url": "http://localhost:8080",
+    "file_storage_path": "/tmp/short-url-db.json",
+    "database_dsn": "postgres://user:pass@localhost/shortener",
+    "enable_https": false
+}
+```
+
+Все поля опциональны. Если поле не указано, используется значение по умолчанию.
+
+### Использование
+
+```bash
+# Через флаг -c
+./shortener -c config.json
+
+# Через флаг -config
+./shortener -config config.json
+
+# Через переменную окружения
+CONFIG=config.json ./shortener
+```
+
+### Приоритет параметров
+
+Конфигурация применяется в следующем порядке (от высшего к низшему):
+
+1. Переменные окружения (наивысший приоритет)
+2. Флаги командной строки
+3. JSON файл конфигурации
+4. Значения по умолчанию (наименьший приоритет)
+
+Пример:
+
+```bash
+# config.json содержит: "server_address": "localhost:9090"
+# Флаг -a устанавливает: localhost:8888
+# Переменная окружения устанавливает: localhost:7777
+
+SERVER_ADDRESS=localhost:7777 ./shortener -c config.json -a localhost:8888
+
+# Результат: сервер запустится на localhost:7777 (переменная окружения)
+```
+
+### Примеры конфигураций
+
+**Минимальная конфигурация:**
+```json
+{
+    "server_address": "localhost:8080"
+}
+```
+
+**Production с PostgreSQL:**
+```json
+{
+    "server_address": ":8080",
+    "base_url": "https://short.example.com",
+    "database_dsn": "postgres://shortener:password@localhost:5432/shortener?sslmode=require",
+    "enable_https": true
+}
+```
+
+**Development с файловым хранилищем:**
+```json
+{
+    "server_address": "localhost:3000",
+    "base_url": "http://localhost:3000",
+    "file_storage_path": "./data/urls.json",
+    "enable_https": false
+}
+```
+
+**С аудитом:**
+```json
+{
+    "server_address": "localhost:8080",
+    "base_url": "http://localhost:8080",
+    "audit_file": "/var/log/shortener/audit.log",
+    "audit_url": "http://audit-server:9000/events"
+}
+```
