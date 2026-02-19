@@ -44,6 +44,7 @@ type Config struct {
 	DatabaseDSN     string // строка подключения к базе данных (флаг -d, переменная DATABASE_DSN)
 	AuditFile       string // путь к файлу аудита (флаг --audit-file, переменная AUDIT_FILE)
 	AuditURL        string // URL удаленного сервера аудита (флаг --audit-url, переменная AUDIT_URL)
+	EnableHTTPS     bool   // включить HTTPS (флаг -s, переменная ENABLE_HTTPS)
 }
 
 // NewConfig создает и инициализирует конфигурацию с приоритетом:
@@ -57,6 +58,7 @@ type Config struct {
 //	-b: базовый адрес результирующего сокращённого URL
 //	-f: путь до файла с данными
 //	-d: строка подключения к базе данных
+//	-s: включить HTTPS
 //	--audit-file: путь к файлу аудита
 //	--audit-url: URL удаленного сервера аудита
 //
@@ -66,6 +68,7 @@ type Config struct {
 //	BASE_URL: базовый адрес результирующего сокращённого URL
 //	FILE_STORAGE_PATH: путь до файла с данными
 //	DATABASE_DSN: строка подключения к базе данных
+//	ENABLE_HTTPS: включить HTTPS (true/false)
 //	AUDIT_FILE: путь к файлу аудита
 //	AUDIT_URL: URL удаленного сервера аудита
 //
@@ -84,6 +87,7 @@ func NewConfig() (*Config, error) {
 	flag.StringVar(&cfg.BaseURL, "b", cfg.BaseURL, "базовый адрес результирующего сокращённого URL")
 	flag.StringVar(&cfg.FileStoragePath, "f", cfg.FileStoragePath, "путь до файла с данными")
 	flag.StringVar(&cfg.DatabaseDSN, "d", cfg.DatabaseDSN, "строка подключения к базе данных")
+	flag.BoolVar(&cfg.EnableHTTPS, "s", false, "включить HTTPS")
 	flag.StringVar(&cfg.AuditFile, "audit-file", cfg.AuditFile, "путь к файлу аудита")
 	flag.StringVar(&cfg.AuditURL, "audit-url", cfg.AuditURL, "URL удаленного сервера аудита")
 	flag.Parse()
@@ -103,6 +107,10 @@ func NewConfig() (*Config, error) {
 
 	if envDatabaseDSN := strings.TrimSpace(os.Getenv("DATABASE_DSN")); envDatabaseDSN != "" {
 		cfg.DatabaseDSN = envDatabaseDSN
+	}
+
+	if envEnableHTTPS := strings.TrimSpace(os.Getenv("ENABLE_HTTPS")); envEnableHTTPS != "" {
+		cfg.EnableHTTPS = envEnableHTTPS == "true" || envEnableHTTPS == "1"
 	}
 
 	if envAuditFile := strings.TrimSpace(os.Getenv("AUDIT_FILE")); envAuditFile != "" {

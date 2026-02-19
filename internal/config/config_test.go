@@ -109,3 +109,85 @@ func TestBaseURLTrailingSlash(t *testing.T) {
 		t.Errorf("Ожидали 'http://localhost:8080', получили '%s'", cfg.BaseURL)
 	}
 }
+
+func TestEnableHTTPS(t *testing.T) {
+	tests := []struct {
+		name        string
+		envValue    string
+		flagValue   bool
+		expectHTTPS bool
+	}{
+		{
+			name:        "HTTPS через флаг",
+			envValue:    "",
+			flagValue:   true,
+			expectHTTPS: true,
+		},
+		{
+			name:        "HTTPS через env (true)",
+			envValue:    "true",
+			flagValue:   false,
+			expectHTTPS: true,
+		},
+		{
+			name:        "HTTPS через env (1)",
+			envValue:    "1",
+			flagValue:   false,
+			expectHTTPS: true,
+		},
+		{
+			name:        "HTTPS отключен",
+			envValue:    "false",
+			flagValue:   false,
+			expectHTTPS: false,
+		},
+		{
+			name:        "env переопределяет флаг",
+			envValue:    "true",
+			flagValue:   false,
+			expectHTTPS: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Сохраняем оригинальные значения
+			oldArgs := os.Args
+			oldEnv := os.Getenv("ENABLE_HTTPS")
+			defer func() {
+				os.Args = oldArgs
+				if oldEnv != "" {
+					os.Setenv("ENABLE_HTTPS", oldEnv)
+				} else {
+					os.Unsetenv("ENABLE_HTTPS")
+				}
+			}()
+
+			// Сбрасываем флаги
+			flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+
+			// Устанавливаем переменную окружения
+			if tt.envValue != "" {
+				os.Setenv("ENABLE_HTTPS", tt.envValue)
+			} else {
+				os.Unsetenv("ENABLE_HTTPS")
+			}
+
+			// Устанавливаем аргументы командной строки
+			if tt.flagValue {
+				os.Args = []string{"cmd", "-s"}
+			} else {
+				os.Args = []string{"cmd"}
+			}
+
+			cfg, err := NewConfig()
+			if err != nil {
+				t.Fatalf("Неожиданная ошибка: %v", err)
+			}
+
+			if cfg.EnableHTTPS != tt.expectHTTPS {
+				t.Errorf("Ожидали EnableHTTPS=%v, получили %v", tt.expectHTTPS, cfg.EnableHTTPS)
+			}
+		})
+	}
+}

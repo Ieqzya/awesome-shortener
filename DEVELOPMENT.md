@@ -125,6 +125,83 @@ app := handler.NewApp(cfg, store)
 - Мапы очищаются через встроенную функцию `clear()`
 - Минимальные аллокации памяти
 
+## Сборка приложения
+
+### Переменные сборки
+
+Приложение поддерживает встраивание информации о версии сборки через ldflags.
+
+**Доступные переменные:**
+- `buildVersion` - версия сборки (по умолчанию "N/A")
+- `buildDate` - дата сборки (по умолчанию "N/A")
+- `buildCommit` - хеш коммита (по умолчанию "N/A")
+
+**Пример сборки с версией:**
+```bash
+go build -ldflags "\
+  -X main.buildVersion=v1.0.0 \
+  -X main.buildDate=$(date -u +%Y-%m-%d) \
+  -X main.buildCommit=$(git rev-parse --short HEAD)" \
+  -o shortener ./cmd/shortener
+```
+
+**Вывод при запуске:**
+```
+Build version: v1.0.0
+Build date: 2026-02-14
+Build commit: abc123d
+
+Хранилище: файл (/tmp/short-url-db.json)
+Сервер запущен на localhost:8080 (HTTP)
+...
+```
+
+**Интеграция в CI/CD:**
+```yaml
+- name: Build with version info
+  run: |
+    VERSION=$(git describe --tags --always)
+    DATE=$(date -u +%Y-%m-%d)
+    COMMIT=$(git rev-parse --short HEAD)
+    go build -ldflags "\
+      -X main.buildVersion=${VERSION} \
+      -X main.buildDate=${DATE} \
+      -X main.buildCommit=${COMMIT}" \
+      -o shortener ./cmd/shortener
+```
+
+### HTTPS поддержка
+
+Приложение поддерживает запуск с HTTPS через флаг `-s` или переменную окружения `ENABLE_HTTPS`.
+
+**Генерация сертификата:**
+```bash
+# Используйте скрипт
+./generate-cert.sh
+
+# Или вручную
+openssl req -x509 -newkey rsa:2048 \
+  -keyout cmd/shortener/key.pem \
+  -out cmd/shortener/cert.pem \
+  -days 365 -nodes -subj "/CN=localhost"
+```
+
+**Запуск с HTTPS:**
+```bash
+# Флаг
+./shortener -s
+
+# Переменная окружения
+ENABLE_HTTPS=true ./shortener
+
+# С другими параметрами
+./shortener -s -a localhost:8443 -b https://localhost:8443
+```
+
+**Требования:**
+- Файлы `cert.pem` и `key.pem` должны находиться в `cmd/shortener/`
+- Для production используйте сертификаты от доверенного CA
+
 ## Workflow разработки
 
 ### 1. Добавление новой структуры с Reset

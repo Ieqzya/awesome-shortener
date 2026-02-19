@@ -102,7 +102,13 @@ func main() {
 	// Добавляем хендлер для проверки соединения с БД
 	r.Get("/ping", handler.PingDatabase(db))
 
-	fmt.Printf("Сервер запущен на %s\n", cfg.ServerAddress)
+	// Определяем протокол
+	protocol := "HTTP"
+	if cfg.EnableHTTPS {
+		protocol = "HTTPS"
+	}
+
+	fmt.Printf("Сервер запущен на %s (%s)\n", cfg.ServerAddress, protocol)
 	fmt.Printf("Базовый URL: %s\n", cfg.BaseURL)
 	if cfg.DatabaseDSN != "" {
 		fmt.Println("База данных: подключена")
@@ -116,7 +122,15 @@ func main() {
 
 	// Запускаем сервер в отдельной горутине
 	go func() {
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		var err error
+		if cfg.EnableHTTPS {
+			// Запускаем HTTPS сервер
+			err = server.ListenAndServeTLS("cert.pem", "key.pem")
+		} else {
+			// Запускаем HTTP сервер
+			err = server.ListenAndServe()
+		}
+		if err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Ошибка запуска сервера: %v", err)
 		}
 	}()

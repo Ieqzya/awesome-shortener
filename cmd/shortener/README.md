@@ -67,7 +67,7 @@ Build date: 2026-02-14
 Build commit: abc123d
 
 Хранилище: файл (/tmp/short-url-db.json)
-Сервер запущен на localhost:8080
+Сервер запущен на localhost:8080 (HTTP)
 Базовый URL: http://localhost:8080
 ```
 
@@ -77,4 +77,61 @@ Build commit: abc123d
 Build version: N/A
 Build date: N/A
 Build commit: N/A
+```
+
+## HTTPS поддержка
+
+Приложение поддерживает запуск с HTTPS.
+
+### Генерация сертификата
+
+Для работы HTTPS необходимы файлы `cert.pem` и `key.pem` в директории `cmd/shortener/`.
+
+Используйте скрипт для генерации самоподписанного сертификата:
+
+```bash
+# Из корня проекта
+./generate-cert.sh
+```
+
+Или вручную:
+
+```bash
+openssl req -x509 -newkey rsa:2048 \
+  -keyout cmd/shortener/key.pem \
+  -out cmd/shortener/cert.pem \
+  -days 365 \
+  -nodes \
+  -subj "/CN=localhost"
+```
+
+### Запуск с HTTPS
+
+```bash
+# Используя флаг -s
+./shortener -s
+
+# Используя переменную окружения
+ENABLE_HTTPS=true ./shortener
+
+# Комбинация с другими параметрами
+./shortener -s -a localhost:8443 -b https://localhost:8443
+```
+
+### Проверка HTTPS
+
+```bash
+# С самоподписанным сертификатом (игнорируем проверку)
+curl -k https://localhost:8080/
+
+# Создание короткой ссылки
+curl -k -X POST https://localhost:8080/ \
+  -H "Content-Type: text/plain" \
+  -d "https://example.com"
+```
+
+При запуске с HTTPS в выводе будет указан протокол:
+
+```
+Сервер запущен на localhost:8080 (HTTPS)
 ```
