@@ -137,16 +137,16 @@ func main() {
 
 	// Ожидаем сигнал завершения
 	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
-	<-quit
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
+	sig := <-quit
 
-	fmt.Println("Завершение работы сервера...")
+	fmt.Printf("\nПолучен сигнал %v. Завершение работы сервера...\n", sig)
 
-	// Останавливаем приложение
+	// Останавливаем приложение (завершаем все фоновые операции)
 	app.Shutdown()
 
-	// Останавливаем HTTP сервер
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// Останавливаем HTTP сервер с таймаутом для обработки активных запросов
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	if err := server.Shutdown(ctx); err != nil {
