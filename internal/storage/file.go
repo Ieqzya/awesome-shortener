@@ -164,6 +164,18 @@ func (f *FileStorage) SaveBatchWithUser(ctx context.Context, items []BatchItem, 
 	return nil
 }
 
+// GetStats возвращает статистику: количество URL и пользователей
+// Примечание: FileStorage не хранит информацию о пользователях, поэтому users всегда 0
+func (f *FileStorage) GetStats(ctx context.Context) (int, int, error) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
+	urlsCount := len(f.urls)
+	usersCount := 0 // FileStorage не хранит информацию о пользователях
+
+	return urlsCount, usersCount, nil
+}
+
 // Close закрывает файл
 func (f *FileStorage) Close() error {
 	if f.file != nil {

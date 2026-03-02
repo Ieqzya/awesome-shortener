@@ -46,6 +46,7 @@ type Config struct {
 	AuditFile       string `json:"audit_file"`        // путь к файлу аудита
 	AuditURL        string `json:"audit_url"`         // URL удаленного сервера аудита
 	EnableHTTPS     bool   `json:"enable_https"`      // включить HTTPS
+	TrustedSubnet   string `json:"trusted_subnet"`    // доверенная подсеть в формате CIDR
 }
 
 // JSONConfig представляет структуру JSON файла конфигурации с опциональными полями
@@ -57,6 +58,7 @@ type JSONConfig struct {
 	AuditFile       *string `json:"audit_file,omitempty"`
 	AuditURL        *string `json:"audit_url,omitempty"`
 	EnableHTTPS     *bool   `json:"enable_https,omitempty"`
+	TrustedSubnet   *string `json:"trusted_subnet,omitempty"`
 }
 
 // NewConfig создает и инициализирует конфигурацию с приоритетом:
@@ -72,6 +74,7 @@ type JSONConfig struct {
 //	-f: путь до файла с данными
 //	-d: строка подключения к базе данных
 //	-s: включить HTTPS
+//	-t: доверенная подсеть в формате CIDR
 //	-c/-config: путь к JSON файлу конфигурации
 //	--audit-file: путь к файлу аудита
 //	--audit-url: URL удаленного сервера аудита
@@ -83,6 +86,7 @@ type JSONConfig struct {
 //	FILE_STORAGE_PATH: путь до файла с данными
 //	DATABASE_DSN: строка подключения к базе данных
 //	ENABLE_HTTPS: включить HTTPS (true/false)
+//	TRUSTED_SUBNET: доверенная подсеть в формате CIDR
 //	CONFIG: путь к JSON файлу конфигурации
 //	AUDIT_FILE: путь к файлу аудита
 //	AUDIT_URL: URL удаленного сервера аудита
@@ -106,6 +110,7 @@ func NewConfig() (*Config, error) {
 	flag.StringVar(&cfg.FileStoragePath, "f", cfg.FileStoragePath, "путь до файла с данными")
 	flag.StringVar(&cfg.DatabaseDSN, "d", cfg.DatabaseDSN, "строка подключения к базе данных")
 	flag.BoolVar(&cfg.EnableHTTPS, "s", false, "включить HTTPS")
+	flag.StringVar(&cfg.TrustedSubnet, "t", "", "доверенная подсеть в формате CIDR")
 	flag.StringVar(&cfg.AuditFile, "audit-file", cfg.AuditFile, "путь к файлу аудита")
 	flag.StringVar(&cfg.AuditURL, "audit-url", cfg.AuditURL, "URL удаленного сервера аудита")
 	flag.Parse()
@@ -141,6 +146,10 @@ func NewConfig() (*Config, error) {
 
 	if envEnableHTTPS := strings.TrimSpace(os.Getenv("ENABLE_HTTPS")); envEnableHTTPS != "" {
 		cfg.EnableHTTPS = envEnableHTTPS == "true" || envEnableHTTPS == "1"
+	}
+
+	if envTrustedSubnet := strings.TrimSpace(os.Getenv("TRUSTED_SUBNET")); envTrustedSubnet != "" {
+		cfg.TrustedSubnet = envTrustedSubnet
 	}
 
 	if envAuditFile := strings.TrimSpace(os.Getenv("AUDIT_FILE")); envAuditFile != "" {
@@ -192,6 +201,9 @@ func loadJSONConfig(filename string, cfg *Config) error {
 	}
 	if jsonCfg.EnableHTTPS != nil {
 		cfg.EnableHTTPS = *jsonCfg.EnableHTTPS
+	}
+	if jsonCfg.TrustedSubnet != nil {
+		cfg.TrustedSubnet = *jsonCfg.TrustedSubnet
 	}
 
 	return nil

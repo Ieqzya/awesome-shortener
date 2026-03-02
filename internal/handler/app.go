@@ -463,3 +463,46 @@ func (app *App) DeleteUserURLs(w http.ResponseWriter, r *http.Request) {
 	// Возвращаем 202 Accepted
 	w.WriteHeader(http.StatusAccepted)
 }
+
+// StatsResponse представляет структуру ответа для эндпоинта статистики
+type StatsResponse struct {
+	URLs  int `json:"urls"`  // количество сокращённых URL
+	Users int `json:"users"` // количество пользователей
+}
+
+// GetStats возвращает статистику сервиса: количество URL и пользователей.
+//
+// Эндпоинт доступен только из доверенной подсети, указанной в конфигурации.
+// IP-адрес клиента проверяется через заголовок X-Real-IP.
+//
+// HTTP методы: GET
+// Пути: /api/internal/stats
+//
+// Формат ответа: {"urls": 100, "users": 50}
+//
+// Возможные ответы:
+//   - 200 OK: статистика успешно получена
+//   - 403 Forbidden: IP не в доверенной подсети
+//   - 500 Internal Server Error: ошибка получения статистики
+func (app *App) GetStats(w http.ResponseWriter, r *http.Request) {
+	// Получаем статистику из хранилища
+	urlsCount, usersCount, err := app.urlService.GetStats(r.Context())
+	if err != nil {
+		log.Printf("Ошибка получения статистики: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	// Возвращаем JSON ответ
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	response := StatsResponse{
+		URLs:  urlsCount,
+		Users: usersCount,
+	}
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("Ошибка кодирования JSON: %v", err)
+	}
+}

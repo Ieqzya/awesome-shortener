@@ -124,6 +124,25 @@ func (m *MemoryStorage) SaveBatchWithUser(ctx context.Context, items []BatchItem
 	return nil
 }
 
+// GetStats возвращает статистику: количество URL и пользователей
+func (m *MemoryStorage) GetStats(ctx context.Context) (int, int, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	urlsCount := len(m.urls)
+
+	// Подсчитываем уникальных пользователей
+	users := make(map[string]struct{})
+	for _, record := range m.urls {
+		if record.UserID != "" {
+			users[record.UserID] = struct{}{}
+		}
+	}
+	usersCount := len(users)
+
+	return urlsCount, usersCount, nil
+}
+
 // Close закрывает хранилище (для памяти ничего не делает)
 func (m *MemoryStorage) Close() error {
 	return nil

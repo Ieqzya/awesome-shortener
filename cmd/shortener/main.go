@@ -102,6 +102,9 @@ func main() {
 	// Добавляем хендлер для проверки соединения с БД
 	r.Get("/ping", handler.PingDatabase(db))
 
+	// Добавляем защищенный эндпоинт статистики
+	r.With(middleware.TrustedSubnetMiddleware(cfg.TrustedSubnet)).Get("/api/internal/stats", app.GetStats)
+
 	// Определяем протокол
 	protocol := "HTTP"
 	if cfg.EnableHTTPS {

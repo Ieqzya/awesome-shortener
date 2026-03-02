@@ -211,6 +211,29 @@ func (d *Database) Ping(ctx context.Context) error {
 	return d.db.PingContext(ctx)
 }
 
+// GetStats возвращает статистику: количество URL и пользователей
+func (d *Database) GetStats(ctx context.Context) (int, int, error) {
+	if d == nil || d.db == nil {
+		return 0, 0, fmt.Errorf("база данных не инициализирована")
+	}
+
+	var urlsCount, usersCount int
+
+	// Получаем количество URL
+	err := d.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM urls").Scan(&urlsCount)
+	if err != nil {
+		return 0, 0, fmt.Errorf("ошибка получения количества URL: %w", err)
+	}
+
+	// Получаем количество уникальных пользователей
+	err = d.db.QueryRowContext(ctx, "SELECT COUNT(DISTINCT user_id) FROM urls WHERE user_id IS NOT NULL AND user_id != ''").Scan(&usersCount)
+	if err != nil {
+		return 0, 0, fmt.Errorf("ошибка получения количества пользователей: %w", err)
+	}
+
+	return urlsCount, usersCount, nil
+}
+
 // Close закрывает соединение с базой данных
 func (d *Database) Close() error {
 	if d == nil || d.db == nil {

@@ -226,6 +226,11 @@ func (s *URLService) Shutdown() {
 	close(s.deleteChan)
 }
 
+// GetStats возвращает статистику: количество URL и пользователей
+func (s *URLService) GetStats(ctx context.Context) (int, int, error) {
+	return s.storage.GetStats(ctx)
+}
+
 // SaveBatchWithUser сохраняет множество URL с привязкой к пользователю.
 //
 // Функция делегирует операцию сохранения хранилищу.

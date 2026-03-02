@@ -107,6 +107,9 @@ type Storage interface {
 	// IsDeleted проверяет, помечен ли URL как удаленный.
 	IsDeleted(ctx context.Context, shortID string) (bool, error)
 
+	// GetStats возвращает статистику: количество URL и пользователей.
+	GetStats(ctx context.Context) (urls int, users int, err error)
+
 	// Close закрывает соединение с хранилищем и освобождает ресурсы.
 	Close() error
 }
