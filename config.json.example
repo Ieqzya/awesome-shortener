@@ -1,5 +1,6 @@
 {
     "server_address": "localhost:8080",
+    "grpc_address": "localhost:3200",
     "base_url": "http://localhost:8080",
     "file_storage_path": "/tmp/short-url-db.json",
     "database_dsn": "",

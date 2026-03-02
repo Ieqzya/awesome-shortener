@@ -17,6 +17,9 @@ import (
 // DefaultServerAddress - адрес сервера по умолчанию
 const DefaultServerAddress = "localhost:8080"
 
+// DefaultGRPCAddress - адрес gRPC сервера по умолчанию
+const DefaultGRPCAddress = "localhost:3200"
+
 // DefaultBaseURL - базовый URL по умолчанию для сокращенных ссылок
 const DefaultBaseURL = "http://localhost:8080"
 
@@ -40,6 +43,7 @@ const DefaultDatabaseDSN = ""
 //	fmt.Printf("Server will start on %s\n", cfg.ServerAddress)
 type Config struct {
 	ServerAddress   string `json:"server_address"`    // адрес запуска HTTP-сервера
+	GRPCAddress     string `json:"grpc_address"`      // адрес запуска gRPC-сервера
 	BaseURL         string `json:"base_url"`          // базовый адрес результирующего сокращённого URL
 	FileStoragePath string `json:"file_storage_path"` // путь до файла с данными
 	DatabaseDSN     string `json:"database_dsn"`      // строка подключения к базе данных
@@ -52,6 +56,7 @@ type Config struct {
 // JSONConfig представляет структуру JSON файла конфигурации с опциональными полями
 type JSONConfig struct {
 	ServerAddress   *string `json:"server_address,omitempty"`
+	GRPCAddress     *string `json:"grpc_address,omitempty"`
 	BaseURL         *string `json:"base_url,omitempty"`
 	FileStoragePath *string `json:"file_storage_path,omitempty"`
 	DatabaseDSN     *string `json:"database_dsn,omitempty"`
@@ -97,6 +102,7 @@ func NewConfig() (*Config, error) {
 
 	// 1. Устанавливаем значения по умолчанию
 	cfg.ServerAddress = DefaultServerAddress
+	cfg.GRPCAddress = DefaultGRPCAddress
 	cfg.BaseURL = DefaultBaseURL
 	cfg.FileStoragePath = DefaultFileStoragePath
 	cfg.DatabaseDSN = DefaultDatabaseDSN
@@ -106,6 +112,7 @@ func NewConfig() (*Config, error) {
 	flag.StringVar(&configFile, "c", "", "путь к JSON файлу конфигурации")
 	flag.StringVar(&configFile, "config", "", "путь к JSON файлу конфигурации")
 	flag.StringVar(&cfg.ServerAddress, "a", cfg.ServerAddress, "адрес запуска HTTP-сервера")
+	flag.StringVar(&cfg.GRPCAddress, "grpc-address", cfg.GRPCAddress, "адрес запуска gRPC-сервера")
 	flag.StringVar(&cfg.BaseURL, "b", cfg.BaseURL, "базовый адрес результирующего сокращённого URL")
 	flag.StringVar(&cfg.FileStoragePath, "f", cfg.FileStoragePath, "путь до файла с данными")
 	flag.StringVar(&cfg.DatabaseDSN, "d", cfg.DatabaseDSN, "строка подключения к базе данных")
@@ -130,6 +137,10 @@ func NewConfig() (*Config, error) {
 	// 4. Переопределяем переменными окружения (наивысший приоритет)
 	if envServerAddr := strings.TrimSpace(os.Getenv("SERVER_ADDRESS")); envServerAddr != "" {
 		cfg.ServerAddress = envServerAddr
+	}
+
+	if envGRPCAddr := strings.TrimSpace(os.Getenv("GRPC_ADDRESS")); envGRPCAddr != "" {
+		cfg.GRPCAddress = envGRPCAddr
 	}
 
 	if envBaseURL := strings.TrimSpace(os.Getenv("BASE_URL")); envBaseURL != "" {
@@ -183,6 +194,9 @@ func loadJSONConfig(filename string, cfg *Config) error {
 	// Применяем значения из JSON только если они указаны
 	if jsonCfg.ServerAddress != nil {
 		cfg.ServerAddress = *jsonCfg.ServerAddress
+	}
+	if jsonCfg.GRPCAddress != nil {
+		cfg.GRPCAddress = *jsonCfg.GRPCAddress
 	}
 	if jsonCfg.BaseURL != nil {
 		cfg.BaseURL = *jsonCfg.BaseURL

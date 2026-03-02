@@ -85,6 +85,16 @@ func (app *App) Shutdown() {
 	}
 }
 
+// GetURLService возвращает URLService для использования в gRPC
+func (app *App) GetURLService() *service.URLService {
+	return app.urlService
+}
+
+// GetAuthService возвращает AuthService для использования в gRPC
+func (app *App) GetAuthService() *auth.AuthService {
+	return app.authService
+}
+
 // ShortenRequest представляет структуру запроса на сокращение URL в JSON формате.
 //
 // Используется для десериализации JSON запросов к эндпоинту /api/shorten.

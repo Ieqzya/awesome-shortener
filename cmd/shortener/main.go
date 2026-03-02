@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -11,12 +12,15 @@ import (
 	"time"
 
 	"awesome-shortener/internal/config"
+	"awesome-shortener/internal/grpc"
+	pb "awesome-shortener/internal/grpc/pb"
 	"awesome-shortener/internal/handler"
 	"awesome-shortener/internal/middleware"
 	"awesome-shortener/internal/storage"
 
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
+	grpcServer "google.golang.org/grpc"
 )
 
 var (
@@ -111,7 +115,7 @@ func main() {
 		protocol = "HTTPS"
 	}
 
-	fmt.Printf("Сервер запущен на %s (%s)\n", cfg.ServerAddress, protocol)
+	fmt.Printf("HTTP сервер запущен на %s (%s)\n", cfg.ServerAddress, protocol)
 	fmt.Printf("Базовый URL: %s\n", cfg.BaseURL)
 	if cfg.DatabaseDSN != "" {
 		fmt.Println("База данных: подключена")
@@ -123,7 +127,7 @@ func main() {
 		Handler: r,
 	}
 
-	// Запускаем сервер в отдельной горутине
+	// Запускаем HTTP сервер в отдельной горутине
 	go func() {
 		var err error
 		if cfg.EnableHTTPS {
@@ -134,27 +138,59 @@ func main() {
 			err = server.ListenAndServe()
 		}
 		if err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Ошибка запуска сервера: %v", err)
+			log.Fatalf("Ошибка запуска HTTP сервера: %v", err)
 		}
 	}()
+
+	// Запускаем gRPC сервер
+	var grpcSrv *grpcServer.Server
+	if cfg.GRPCAddress != "" {
+		fmt.Printf("gRPC сервер запущен на %s\n", cfg.GRPCAddress)
+		
+		// Создаем gRPC сервер
+		grpcSrv = grpcServer.NewServer()
+		
+		// Регистрируем сервис
+		grpcService := grpc.NewShortenerServer(cfg, app.GetURLService(), app.GetAuthService())
+		pb.RegisterShortenerServiceServer(grpcSrv, grpcService)
+		
+		// Запускаем gRPC сервер в отдельной горутине
+		go func() {
+			lis, err := net.Listen("tcp", cfg.GRPCAddress)
+			if err != nil {
+				log.Fatalf("Ошибка создания gRPC listener: %v", err)
+			}
+			
+			if err := grpcSrv.Serve(lis); err != nil {
+				log.Fatalf("Ошибка запуска gRPC сервера: %v", err)
+			}
+		}()
+	}
 
 	// Ожидаем сигнал завершения
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
 	sig := <-quit
 
-	fmt.Printf("\nПолучен сигнал %v. Завершение работы сервера...\n", sig)
+	fmt.Printf("\nПолучен сигнал %v. Завершение работы серверов...\n", sig)
 
 	// Останавливаем приложение (завершаем все фоновые операции)
 	app.Shutdown()
 
+	// Останавливаем gRPC сервер
+	if grpcSrv != nil {
+		fmt.Println("Остановка gRPC сервера...")
+		grpcSrv.GracefulStop()
+	}
+
 	// Останавливаем HTTP сервер с таймаутом для обработки активных запросов
+	fmt.Println("Остановка HTTP сервера...")
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	if err := server.Shutdown(ctx); err != nil {
-		log.Printf("Ошибка при завершении сервера: %v", err)
+		log.Printf("Ошибка при завершении HTTP сервера: %v", err)
 	}
 
-	fmt.Println("Сервер остановлен")
+	fmt.Println("Серверы остановлены")
 }

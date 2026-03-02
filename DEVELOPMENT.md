@@ -243,7 +243,7 @@ DATABASE_DSN="postgres://..." ./shortener -c config.json
 **Процесс завершения:**
 1. Получение сигнала
 2. Остановка фоновых операций (завершение очереди удаления URL)
-3. Остановка HTTP сервера (таймаут 30 секунд для активных запросов)
+3. Остановка HTTP и gRPC серверов (таймаут 30 секунд для активных запросов)
 4. Сохранение всех данных в хранилище
 5. Закрытие соединений и файлов
 
@@ -266,11 +266,72 @@ sudo systemctl stop shortener
 ```
 
 **Гарантии:**
-- Все активные HTTP запросы обрабатываются до конца
+- Все активные HTTP и gRPC запросы обрабатываются до конца
 - Все несохраненные данные записываются в хранилище
 - Фоновые операции завершаются корректно
 
 См. [SHUTDOWN.md](SHUTDOWN.md) для подробной документации
+
+### gRPC поддержка
+
+Приложение поддерживает gRPC API параллельно с HTTP.
+
+**Генерация protobuf кода:**
+```bash
+# Установка protoc (macOS)
+brew install protobuf
+
+# Генерация Go кода
+./generate-proto.sh
+```
+
+**Конфигурация:**
+```bash
+# Флаг
+./shortener -grpc-address localhost:3200
+
+# Переменная окружения
+GRPC_ADDRESS=localhost:3200 ./shortener
+
+# JSON конфигурация
+{
+  "grpc_address": "localhost:3200"
+}
+```
+
+**Доступные методы:**
+- `ShortenURL` - сокращение URL (аналог POST /api/shorten)
+- `ExpandURL` - получение оригинального URL (аналог GET /<id>)
+- `ListUserURLs` - список URL пользователя (аналог GET /api/user/urls)
+
+**Тестирование с grpcurl:**
+```bash
+# Установка grpcurl
+brew install grpcurl
+
+# Сокращение URL
+grpcurl -plaintext \
+  -d '{"url": "https://example.com"}' \
+  localhost:3200 shortener.ShortenerService/ShortenURL
+
+# Получение оригинального URL
+grpcurl -plaintext \
+  -d '{"id": "abc123"}' \
+  localhost:3200 shortener.ShortenerService/ExpandURL
+
+# Список URL пользователя
+grpcurl -plaintext \
+  -H "authorization: Bearer <token>" \
+  localhost:3200 shortener.ShortenerService/ListUserURLs
+```
+
+**Архитектура:**
+- HTTP и gRPC хендлеры являются фасадами к общей бизнес-логике
+- Авторизация через metadata (header "authorization")
+- Параллельная работа HTTP и gRPC серверов
+- Graceful shutdown для обоих серверов
+
+См. [GRPC.md](GRPC.md) для подробной документации
 
 ## Workflow разработки
 
