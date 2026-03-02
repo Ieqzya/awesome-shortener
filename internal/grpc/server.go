@@ -101,9 +101,7 @@ func (s *ShortenerServer) ShortenURL(ctx context.Context, req *pb.URLShortenRequ
 	
 	// Отправляем header с authorization
 	signedUserID := s.authService.SignValue(userID)
-	if err := grpc.SendHeader(ctx, metadata.Pairs("authorization", "Bearer "+signedUserID)); err != nil {
-		// Игнорируем ошибку отправки header
-	}
+	_ = grpc.SendHeader(ctx, metadata.Pairs("authorization", "Bearer "+signedUserID))
 
 	return &pb.URLShortenResponse{
 		Result: shortURL,
