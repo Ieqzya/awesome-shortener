@@ -22,8 +22,9 @@ type MemoryURLRecord struct {
 // Все данные теряются при перезапуске приложения.
 // Реализация потокобезопасна.
 type MemoryStorage struct {
-	urls map[string]MemoryURLRecord // карта для хранения URL записей
-	mu   sync.RWMutex               // мьютекс для потокобезопасности
+	urls        map[string]MemoryURLRecord // карта для хранения URL записей
+	urlToShortID map[string]string         // обратный индекс: originalURL -> shortID для O(1) поиска
+	mu          sync.RWMutex               // мьютекс для потокобезопасности
 }
 
 // NewMemoryStorage создает новое хранилище в оперативной памяти.
@@ -31,7 +32,8 @@ type MemoryStorage struct {
 // Возвращает инициализированный MemoryStorage с пустой картой URL.
 func NewMemoryStorage() *MemoryStorage {
 	return &MemoryStorage{
-		urls: make(map[string]MemoryURLRecord),
+		urls:        make(map[string]MemoryURLRecord),
+		urlToShortID: make(map[string]string),
 	}
 }
 
@@ -45,17 +47,16 @@ func (m *MemoryStorage) SaveURLWithUser(ctx context.Context, shortID, originalUR
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Проверяем, существует ли уже такой URL
-	for existingShortID, record := range m.urls {
-		if record.OriginalURL == originalURL {
-			return &ErrConflict{ShortID: existingShortID}
-		}
+	// Проверяем конфликт через обратный индекс O(1)
+	if existingShortID, exists := m.urlToShortID[originalURL]; exists {
+		return &ErrConflict{ShortID: existingShortID}
 	}
 
 	m.urls[shortID] = MemoryURLRecord{
 		OriginalURL: originalURL,
 		UserID:      userID,
 	}
+	m.urlToShortID[originalURL] = shortID
 	return nil
 }
 
@@ -79,12 +80,12 @@ func (m *MemoryStorage) GetByOriginalURL(ctx context.Context, originalURL string
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	for shortID, record := range m.urls {
-		if record.OriginalURL == originalURL {
-			return shortID, nil
-		}
+	// Используем обратный индекс для O(1) поиска
+	shortID, exists := m.urlToShortID[originalURL]
+	if !exists {
+		return "", fmt.Errorf("URL не найден")
 	}
-	return "", fmt.Errorf("URL не найден")
+	return shortID, nil
 }
 
 // GetUserURLs получает все URL пользователя
@@ -120,6 +121,7 @@ func (m *MemoryStorage) SaveBatchWithUser(ctx context.Context, items []BatchItem
 			OriginalURL: item.OriginalURL,
 			UserID:      userID,
 		}
+		m.urlToShortID[item.OriginalURL] = item.ShortID
 	}
 	return nil
 }
@@ -157,6 +159,8 @@ func (m *MemoryStorage) DeleteURLs(ctx context.Context, shortIDs []string, userI
 		if record, exists := m.urls[shortID]; exists && record.UserID == userID {
 			record.IsDeleted = true
 			m.urls[shortID] = record
+			// Удаляем из обратного индекса при мягком удалении
+			delete(m.urlToShortID, record.OriginalURL)
 		}
 	}
 	return nil

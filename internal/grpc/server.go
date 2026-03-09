@@ -71,16 +71,6 @@ func (s *ShortenerServer) getUserIDFromContext(ctx context.Context) string {
 	return userID
 }
 
-// setUserIDToContext добавляет userID в outgoing metadata
-func (s *ShortenerServer) setUserIDToContext(ctx context.Context, userID string) context.Context {
-	// Подписываем userID
-	signedUserID := s.authService.SignValue(userID)
-
-	// Добавляем в outgoing metadata
-	md := metadata.Pairs("authorization", "Bearer "+signedUserID)
-	return metadata.NewOutgoingContext(ctx, md)
-}
-
 // ShortenURL сокращает URL
 func (s *ShortenerServer) ShortenURL(ctx context.Context, req *pb.URLShortenRequest) (*pb.URLShortenResponse, error) {
 	if req.Url == "" {
@@ -96,12 +86,9 @@ func (s *ShortenerServer) ShortenURL(ctx context.Context, req *pb.URLShortenRequ
 		return nil, status.Errorf(codes.Internal, "failed to shorten URL: %v", err)
 	}
 
-	// Добавляем userID в ответ
-	ctx = s.setUserIDToContext(ctx, userID)
-	
-	// Отправляем header с authorization
+	// Отправляем header с authorization для клиента
 	signedUserID := s.authService.SignValue(userID)
-	_ = grpc.SendHeader(ctx, metadata.Pairs("authorization", "Bearer "+signedUserID))
+	_ = grpc.SetHeader(ctx, metadata.Pairs("authorization", "Bearer "+signedUserID))
 
 	return &pb.URLShortenResponse{
 		Result: shortURL,
